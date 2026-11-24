@@ -1,6 +1,6 @@
 // Service worker de Roots Tablet: guarda la app en el teléfono/tablet para que abra sin internet.
 // Al cambiar cualquier archivo de la app, sube VERSION para que los equipos descarguen la versión nueva.
-const VERSION = 'roots-tablet-v1.22.0';
+const VERSION = 'roots-tablet-v1.22.1';
 const ARCHIVOS = [
   './',
   'css/app.css',

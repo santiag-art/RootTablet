@@ -96,14 +96,14 @@ function panelJugada(V) {
 
 function ultimasJugadas(V) {
   const { d, est } = V;
-  const ev = est.actual.eventos.slice(-5).reverse();
-  if (!ev.length) return null;
+  // Solo la última jugada, en una sola fila de alto fijo: así no crece ni tapa a las jugadoras.
+  const e = est.actual.eventos[est.actual.eventos.length - 1];
+  if (!e) return null;
   return h(
     'div',
-    {},
-    h('div', { class: 'titulo-grupo' }, 'Últimas jugadas'),
-    h('div', { class: 'lista-jugadas' }, ev.map((e) => h('div', {}, `${d.nombre(e.jugadorId)} · ${e.fundamento}`, h('span', { class: 'cal' }, CALIFICACIONES.find((c) => c.value === e.calificacion)?.label ?? e.calificacion)))),
-    h('button', { class: 'btn btn-fantasma', style: { marginTop: '8px' }, disabled: V.bloqueado, onclick: () => V.aplicar((e) => deshacerUltimaJugada(e)) }, icono('deshacer', { tam: 18 }), ' Quitar la última jugada')
+    { class: 'ultima-jugada' },
+    h('div', { class: 'lista-jugadas' }, h('div', {}, h('span', { class: 'etq' }, 'Última'), `${d.nombre(e.jugadorId)} · ${e.fundamento}`, h('span', { class: 'cal' }, CALIFICACIONES.find((c) => c.value === e.calificacion)?.label ?? e.calificacion))),
+    h('button', { class: 'btn btn-fantasma', disabled: V.bloqueado, onclick: () => V.aplicar((x) => deshacerUltimaJugada(x)) }, icono('deshacer', { tam: 18 }), ' Quitar')
   );
 }
 
