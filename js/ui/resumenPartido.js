@@ -1,4 +1,5 @@
 // Pestaña "Resumen": estadísticas del partido para verlas en el descanso, sin pasar por Roots.
+import { duracionDePartido, formatoDuracion } from '../duracion.js';
 import { app, irA } from '../contexto.js';
 import { nombreDeGrupo, porcentaje, resumenDePartido } from '../estadisticas.js';
 import { lineaDelSet, svgLineaDelSet } from '../lineaSet.js';
@@ -22,6 +23,12 @@ const celdas = (c) => [h('td', { class: 'c-tot' }, c.total), h('td', { class: 'c
 
 const encabezado = (primera) => h('thead', {}, h('tr', {}, h('th', {}, primera), ['Jugadas', '++', '+', '−', 'Err', 'Efect.'].map((t) => h('th', {}, t))));
 
+// Cuánto se demoró el partido (con los descansos entre sets). No sale si los sets no se anotaron con el reloj.
+function duracionTotal(est) {
+  const total = duracionDePartido(est.sets);
+  return total == null ? null : h('div', { class: 'rm-duracion', 'data-duracion': '' }, h('span', {}, 'Duración del partido'), h('b', {}, formatoDuracion(total)));
+}
+
 function tarjetaMarcador(V, resumen) {
   const { d, nombres } = V;
   return h(
@@ -38,11 +45,12 @@ function tarjetaMarcador(V, resumen) {
               { class: `rm-set ${s.enJuego ? 'en-juego' : ''}` },
               h('span', { class: 'rm-n' }, s.enJuego ? `Set ${s.numeroSet} · en juego` : `Set ${s.numeroSet}`),
               h('span', { class: 'rm-pts' }, `${s.puntosLocal} - ${s.puntosVisitante}`),
-              h('span', { class: 'rm-det' }, `TM ${s.tiemposMuertos.local}-${s.tiemposMuertos.visitante} · cambios ${s.cambios}`)
+              h('span', { class: 'rm-det' }, `TM ${s.tiemposMuertos.local}-${s.tiemposMuertos.visitante} · cambios ${s.cambios}${s.duracionSeg != null ? ` · ${formatoDuracion(s.duracionSeg)}` : ''}`)
             )
           )
         )
-      : h('p', { class: 'nota' }, 'Todavía no hay puntos anotados.')
+      : h('p', { class: 'nota' }, 'Todavía no hay puntos anotados.'),
+    duracionTotal(V.est)
   );
 }
 

@@ -6,6 +6,7 @@
 //
 // Todo vive en un objeto de estado simple (`est`, ver nuevoEstadoPartido) que se puede guardar como JSON.
 // Cada función pública valida primero y, si una regla falla, lanza ErrorRegla SIN dejar el estado a medias.
+import { segundosEntre } from './duracion.js';
 import { rotar, reemplazadosPorLibero, slotsDesdeTitulares, aplicarSustituciones } from './reglas/rotaciones.js';
 import { TIPOS_LIBERO_POR_MODO, INDICES_LIBERO } from './reglas/liberos.js';
 import { contarSetsGanados, requiereCambioDeCancha } from './reglas/voleibol.js';
@@ -62,6 +63,9 @@ export function nuevoSetEnCurso(anterior = null) {
     puntosSeq: [],
     // En paralelo a puntosSeq: con qué rotación del equipo (0 a 5) y quién tenía el saque cuando cayó cada punto.
     puntosInfo: [],
+    // Reloj del set: cuándo cayó el primer punto y cuándo el último (ver duracion.js).
+    relojInicio: null,
+    relojFin: null,
   };
 }
 
@@ -545,6 +549,42 @@ export function designarNuevoLibero(est, ctx, lesionadoId, nuevoId_) {
 
 // ─────────────────────────── Cambios (sustituciones) ───────────────────────────
 
+// ¿Se puede hacer este cambio como sustitución NORMAL? Devuelve el mensaje de la regla que lo impide o null si es legal.
+// Son las mismas comprobaciones de ejecutarSustitucion (que ahora la usa), para poder preguntar "¿puede entrar?" sin hacer el
+// cambio: las sugerencias de cambio solo ofrecen jugadoras que de verdad pueden entrar.
+export function errorDeCambioNormal(est, ctx, saleId, entraId) {
+  const act = est.actual;
+  const d = derivados(est, ctx);
+  if (!act.plantillaConfirmada) return 'Confirma la plantilla antes de hacer cambios.';
+  if (d.esLiberoId(saleId)) return 'El líbero no se sustituye: sácalo con su botón y vuelve quien reemplazó.';
+  if (!act.slots.includes(saleId)) return 'Esa jugadora no está en la cancha.';
+  if (saleId === entraId) return 'Un jugador no puede sustituirse a sí mismo.';
+  if (!jugadorDelTorneo(ctx, entraId)) return 'Esa jugadora no está en la plantilla de este torneo.';
+  if (d.reemplazadosIds.has(entraId)) return `${d.nombre(entraId)} está fuera por el líbero: vuelve cuando el líbero salga.`;
+  if (d.esLiberoId(entraId)) return 'Un líbero entra con su propio botón "Entrar", no como sustitución.';
+  if (act.slots.includes(entraId)) return 'Esa jugadora ya está en la cancha.';
+  if (d.inhabilitadosLibero.has(entraId)) return 'Ese jugador fue declarado no apto como líbero y no puede volver a jugar en este partido (regla 19.4.2.2).';
+  const { regulares, titularesIds, previas } = contextoDeSustituciones(est);
+  if (regulares.length >= MAX_SUSTITUCIONES) {
+    return 'Ya se registraron 6 sustituciones en este set — es el máximo permitido por equipo (las entradas y salidas del líbero no cuentan). Si una jugadora se lesionó, usa el cambio excepcional.';
+  }
+  return errorReingreso({ salidaId: saleId, entraId, titularesIds, previas });
+}
+
+// Lo que las reglas de sustitución necesitan saber del set en curso y del partido.
+function contextoDeSustituciones(est) {
+  const act = est.actual;
+  const titulares = act.titulares.filter((t) => !t.esLibero).map((t) => t.jugadorId);
+  const delSet = act.sustituciones.filter((s) => !s.porLibero && !s.nuevoLibero);
+  // la jugadora que salió por un cambio excepcional no vuelve en todo el partido (no solo en ese set)
+  const delPartido = todasLasSustituciones(est).filter((s) => !s.porLibero && s.excepcional);
+  const regulares = delSet.filter((s) => !s.excepcional);
+  const previas = [...delSet, ...delPartido.filter((e) => !delSet.some((s) => s.id === e.id))];
+  // Quien entra en un cambio excepcional ocupa el lugar de la lesionada: cuenta como parte de la línea titular.
+  const titularesIds = [...titulares, ...delSet.filter((s) => s.excepcional).map((s) => s.jugadorEntraId)];
+  return { regulares, previas, titularesIds };
+}
+
 export function ejecutarSustitucion(est, ctx, saleId, entraId, { excepcional = false, posicion = null } = {}) {
   return transaccion(est, () => {
     exigirPosicionValida(posicion);
@@ -561,14 +601,7 @@ export function ejecutarSustitucion(est, ctx, saleId, entraId, { excepcional = f
     // Regla 19.4.2.2: el líbero declarado no apto no vuelve a jugar en el partido.
     if (d.inhabilitadosLibero.has(entraId)) fallo('Ese jugador fue declarado no apto como líbero y no puede volver a jugar en este partido (regla 19.4.2.2).');
 
-    const titulares = act.titulares.filter((t) => !t.esLibero).map((t) => t.jugadorId);
-    const delSet = act.sustituciones.filter((s) => !s.porLibero && !s.nuevoLibero);
-    // la jugadora que salió por un cambio excepcional no vuelve en todo el partido (no solo en ese set)
-    const delPartido = todasLasSustituciones(est).filter((s) => !s.porLibero && s.excepcional);
-    const regulares = delSet.filter((s) => !s.excepcional);
-    const previas = [...delSet, ...delPartido.filter((e) => !delSet.some((s) => s.id === e.id))];
-    // Quien entra en un cambio excepcional ocupa el lugar de la lesionada: cuenta como parte de la línea titular.
-    const titularesIds = [...titulares, ...delSet.filter((s) => s.excepcional).map((s) => s.jugadorEntraId)];
+    const { regulares, previas, titularesIds } = contextoDeSustituciones(est);
 
     if (excepcional) {
       const error = errorCambioExcepcional({
@@ -668,6 +701,9 @@ export function sumarPunto(est, ctx, lado, nombresEquipos = {}) {
     if (siguiendoSaque && act.saca == null) fallo('Elige primero quién saca, para que la rotación siga el marcador.');
     const sacabaAntes = act.saca;
     let rotacion = null;
+    const ahoraReloj = ahoraISO(ctx);
+    if (act.puntosLocal + act.puntosVisitante === 0 || !act.relojInicio) act.relojInicio = ahoraReloj;
+    act.relojFin = ahoraReloj;
     cambiarPuntos(act, lado, 1);
     act.puntosSeq = [...(act.puntosSeq ?? []), lado];
     act.puntosInfo = [...(act.puntosInfo ?? []), { rot: siguiendoSaque ? act.rotaciones : null, saca: sacabaAntes ?? null }];
@@ -860,6 +896,10 @@ export function guardarSet(est, ctx, puntosLocal, puntosVisitante) {
       puntosSeq: [...(act.puntosSeq ?? [])],
       puntosInfo: [...(act.puntosInfo ?? [])],
       tiemposMuertos: { ...act.tiemposMuertos },
+      // Reloj del set (null si no se anotó con el marcador, p. ej. un set cargado a mano).
+      inicioEn: act.puntosLocal + act.puntosVisitante > 0 ? act.relojInicio ?? null : null,
+      finEn: act.puntosLocal + act.puntosVisitante > 0 ? act.relojFin ?? null : null,
+      duracionSeg: act.puntosLocal + act.puntosVisitante > 0 ? segundosEntre(act.relojInicio, act.relojFin) : null,
       // Cómo quedó la cancha al cerrar el set: sirve para reabrirlo exactamente como estaba (no viaja a Roots).
       cierre: { slots: [...act.slots], rotaciones: act.rotaciones, saca: act.saca, primerSaque: act.primerSaque },
     });
@@ -935,6 +975,8 @@ export function reabrirUltimoSet(est) {
     nuevo.puntosLocal = ultimo.puntosLocal;
     nuevo.puntosVisitante = ultimo.puntosVisitante;
     nuevo.tiemposMuertos = { ...ultimo.tiemposMuertos };
+    nuevo.relojInicio = ultimo.inicioEn ?? null;
+    nuevo.relojFin = ultimo.finEn ?? null;
     nuevo.titulares = ultimo.titulares;
     nuevo.sustituciones = ultimo.sustituciones;
     // Vuelven las posiciones con que se jugó ese set (la elección del set siguiente, si ya había una, se descarta).

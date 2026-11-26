@@ -6,6 +6,7 @@ import { fundamentosPermitidos } from '../reglas/fundamentosPosicion.js';
 import { INFO_LIBERO } from '../reglas/liberos.js';
 import { rotar } from '../reglas/rotaciones.js';
 import { h, icono, nombreCorto } from './dom.js';
+import { miniCancha } from './miniCancha.js';
 import { circuloJugador } from './piezas.js';
 
 const SEL = { jugadorId: null, fundamento: null, enConjunto: false, pase: null };
@@ -76,18 +77,24 @@ function panelJugada(V) {
   return h(
     'div',
     { class: 'panel-jugada' },
+    // Cabecera fija: el nombre y la X para quitar la selección si te equivocaste de jugadora. Se queda arriba al hacer scroll.
     h(
       'div',
-      {},
+      { class: 'panel-cabeza' },
       h('div', { class: 'titulo-grupo' }, `${j.nombre}${esLib ? ` · ${INFO_LIBERO[d.tipoLiberoPorId.get(j.id)].nombre}` : ''}`),
+      h('button', { class: 'btn-icono panel-x', 'aria-label': 'Quitar selección', onclick: () => { limpiar(); V.pintar(); } }, icono('cerrar', { tam: 24, grueso: 3 }))
+    ),
+    h(
+      'div',
+      { class: 'col-fund' },
       miniStat(V, j.id, permitidos),
-      h('div', { class: 'grid-fund bloque-btns', style: { '--cols': permitidos.length > 4 ? 3 : 2 } }, permitidos.map((f) => h('button', { class: 'btn-fund', 'aria-pressed': String(SEL.fundamento === f), onclick: () => { SEL.fundamento = f; SEL.enConjunto = false; SEL.pase = null; V.pintar(); } }, f))),
+      h('div', { class: 'grid-fund bloque-btns', style: { '--cols': permitidos.length > 4 ? 3 : 2 } }, permitidos.map((f) => h('button', { class: 'btn-fund', 'aria-pressed': String(SEL.fundamento === f), onclick: () => { SEL.fundamento = SEL.fundamento === f ? null : f; SEL.enConjunto = false; SEL.pase = null; V.pintar(); } }, f))),
       esColocacion ? h('div', { class: 'bloque-btns' }, h('p', { class: 'ayuda-calif' }, '¿Cómo llegó el pase? (opcional)'), h('div', { class: 'segmentos' }, [['bueno', 'Pase bueno'], ['malo', 'Pase malo']].map(([v, t]) => h('button', { 'aria-pressed': String(SEL.pase === v), onclick: () => { SEL.pase = SEL.pase === v ? null : v; V.pintar(); } }, t)))) : null,
       esBloqueo ? h('button', { class: 'check-grande', 'aria-pressed': String(SEL.enConjunto), onclick: () => { SEL.enConjunto = !SEL.enConjunto; V.pintar(); } }, h('span', { class: 'caja' }, SEL.enConjunto ? icono('ok', { tam: 18, grueso: 3 }) : null), 'Bloqueo en conjunto (solo con doble positivo)') : null
     ),
     h(
       'div',
-      {},
+      { class: 'col-calif' },
       h('p', { class: 'ayuda-calif' }, SEL.fundamento ? `${SEL.fundamento}: ¿cómo salió?` : 'Primero elige el fundamento'),
       h('div', { class: 'grid-calif' }, CALIFICACIONES.map((c) => h('button', { class: `btn-calif calif-${c.value}`, disabled: !SEL.fundamento, onclick: () => registrar(c.value) }, c.label)))
     )
@@ -96,14 +103,14 @@ function panelJugada(V) {
 
 function ultimasJugadas(V) {
   const { d, est } = V;
-  // Solo la última jugada, en una sola fila de alto fijo: así no crece ni tapa a las jugadoras.
-  const e = est.actual.eventos[est.actual.eventos.length - 1];
-  if (!e) return null;
+  const ev = est.actual.eventos.slice(-5).reverse();
+  if (!ev.length) return null;
   return h(
     'div',
-    { class: 'ultima-jugada' },
-    h('div', { class: 'lista-jugadas' }, h('div', {}, h('span', { class: 'etq' }, 'Última'), `${d.nombre(e.jugadorId)} · ${e.fundamento}`, h('span', { class: 'cal' }, CALIFICACIONES.find((c) => c.value === e.calificacion)?.label ?? e.calificacion))),
-    h('button', { class: 'btn btn-fantasma', disabled: V.bloqueado, onclick: () => V.aplicar((x) => deshacerUltimaJugada(x)) }, icono('deshacer', { tam: 18 }), ' Quitar')
+    {},
+    h('div', { class: 'titulo-grupo' }, 'Últimas jugadas'),
+    h('div', { class: 'lista-jugadas' }, ev.map((e) => h('div', {}, `${d.nombre(e.jugadorId)} · ${e.fundamento}`, h('span', { class: 'cal' }, CALIFICACIONES.find((c) => c.value === e.calificacion)?.label ?? e.calificacion)))),
+    h('button', { class: 'btn btn-fantasma', style: { marginTop: '8px' }, disabled: V.bloqueado, onclick: () => V.aplicar((e) => deshacerUltimaJugada(e)) }, icono('deshacer', { tam: 18 }), ' Quitar la última jugada')
   );
 }
 
@@ -112,7 +119,7 @@ export function vistaAcciones(V) {
   return h(
     'div',
     { class: 'acciones', 'data-scroll': 'acciones' },
-    confirmada ? filaCirculos(V) : h('p', { class: 'sin-seleccion' }, 'Confirma la plantilla en la pestaña Plantilla para anotar jugadas.'),
+    confirmada ? h('div', { class: 'acciones-cabecera' }, filaCirculos(V), miniCancha(V, SEL.jugadorId)) : h('p', { class: 'sin-seleccion' }, 'Confirma la plantilla en la pestaña Plantilla para anotar jugadas.'),
     confirmada ? panelJugada(V) : null,
     ultimasJugadas(V)
   );

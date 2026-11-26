@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Roots Tablet</title>
+  <!-- Política de seguridad: la app solo carga lo suyo (y Google, si activas Drive). Debe ser igual a la de _headers y netlify.toml; lo verifica tests/pwa.test.js. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <meta name="theme-color" content="#0b1220" />
   <meta name="description" content="Anotación de partidos de voleibol sin internet. Lee el archivo exportado de Roots." />
   <link rel="manifest" href="manifest.webmanifest" />

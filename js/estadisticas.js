@@ -1,6 +1,7 @@
 // Estadísticas de un partido a partir de las jugadas anotadas. Función pura: no toca la pantalla ni el almacenamiento.
 //
 // Alcance: 'todo' (el partido completo), un número de set cerrado (1, 2, ...) o 'actual' (el set en juego).
+import { duracionDeSet } from './duracion.js';
 import { FUNDAMENTOS } from './reglas/anotacion.js';
 import { ORDEN_POSICIONES, NOMBRES_POSICION, clavePosicion } from './reglas/fundamentosPosicion.js';
 
@@ -25,7 +26,7 @@ export function desglosePorFundamento(eventos) {
 }
 
 // Quién jugó de líbero en algún set (la ficha puede decir otra posición).
-function idsLiberos(est) {
+export function idsLiberos(est) {
   const filas = [...est.sets.flatMap((s) => s.titulares), ...est.actual.titulares];
   return new Set(filas.filter((t) => t.esLibero).map((t) => t.jugadorId));
 }
@@ -65,6 +66,7 @@ export function setsDelPartido(est) {
     tiemposMuertos: s.tiemposMuertos ?? { local: 0, visitante: 0 },
     cambios: cambios(s.sustituciones),
     jugadas: s.eventos.length,
+    duracionSeg: duracionDeSet(s),
   }));
   const a = est.actual;
   const hayDatos = a.puntosLocal + a.puntosVisitante > 0 || a.eventos.length > 0;

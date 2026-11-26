@@ -6,20 +6,25 @@ import { confirmar, informar, toast } from './aviso.js';
 import { h } from './dom.js';
 import { entregarArchivo } from './entregar.js';
 
+// Devuelve true si la copia salió de la tablet, false si no había nada que copiar o la persona canceló.
 export async function guardarCopiaAhora() {
   const copia = await construirCopia(app.almacen, { versionApp: app.version });
   const c = contarCopia(copia);
-  if (c.partidos === 0 && c.jugadores === 0) return toast('No hay nada que copiar todavía.', 'info');
+  if (c.partidos === 0 && c.jugadores === 0) {
+    toast('No hay nada que copiar todavía.', 'info');
+    return false;
+  }
   const salio = await entregarArchivo(JSON.stringify(copia), nombreArchivoCopia(new Date()), {
     titulo: 'Guardar la copia',
     textoCompartir: 'Mándala a tu correo, Drive o WhatsApp para tenerla fuera de la tablet, o guárdala aquí.',
   });
-  if (!salio) return;
+  if (!salio) return false;
   // Se marca la hora en que se tomó la copia, no la de ahora: lo anotado mientras se compartía queda como pendiente.
   await marcarCopiaHecha(app.almacen, new Date(copia.creadaEn));
   app.ultimaCopia = copia.creadaEn;
   toast(`Copia guardada: ${c.partidos} partido${c.partidos === 1 ? '' : 's'}.`, 'ok');
   app.renderizar();
+  return true;
 }
 
 export function elegirYRestaurar() {
@@ -43,6 +48,10 @@ export function elegirYRestaurar() {
 }
 
 export async function restaurarDesdeTexto(texto) {
+  if (app.practica) {
+    await informar({ titulo: 'Modo práctica', texto: 'No se puede restaurar una copia mientras practicas. Sal del modo práctica primero.' });
+    return false;
+  }
   const copia = leerCopia(texto);
   const c = contarCopia(copia);
   const fecha = new Date(copia.creadaEn).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });

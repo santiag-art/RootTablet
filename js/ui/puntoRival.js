@@ -1,7 +1,7 @@
 // Ventana "¿Cómo anotó el rival?": un toque para el motivo y, si fue un ataque, de qué zona salió y en qué zona de
 // nuestra cancha cayó. Se puede cerrar con Omitir sin anotar nada (el punto ya quedó sumado).
 import { detallarPuntoRival } from '../motor.js';
-import { MOTIVOS_RIVAL, ZONAS_ATAQUE, ZONAS_CAIDA, crucesOrdenados, frasesDelRival } from '../puntosRival.js';
+import { MAPA_CALOR, MOTIVOS_RIVAL, ZONAS_ATAQUE, ZONAS_CAIDA, centrosDeZonas, crucesOrdenados, frasesDelRival } from '../puntosRival.js';
 import { abrirVentana } from './aviso.js';
 import { h } from './dom.js';
 
@@ -99,17 +99,8 @@ export function preguntarPuntoRival(V) {
 // Arriba la cancha del rival, abajo la nuestra. Las zonas del rival se pintan según de dónde atacó y las nuestras según
 // dónde cayó la pelota; las flechas son las trayectorias que más se repiten. Los números de zona son los de cada equipo
 // (por eso la zona 4 del rival queda a la derecha: es su izquierda).
-const ANCHO = 100;
-const ALTO = 102;
-const X0 = 15;
-const FILAS_RIVAL = [{ y: 10, zonas: [1, 6, 5] }, { y: 112, zonas: [2, 3, 4] }]; // de arriba (fondo) a la red
-const FILAS_NUESTRA = [{ y: 227, zonas: [4, 3, 2] }, { y: 329, zonas: [5, 6, 1] }]; // de la red al fondo
-
-function centros(filas) {
-  const mapa = new Map();
-  filas.forEach(({ y, zonas }) => zonas.forEach((z, i) => mapa.set(z, { x: X0 + i * ANCHO, y })));
-  return mapa;
-}
+const { anchoZona: ANCHO, altoZona: ALTO, x0: X0, filasRival: FILAS_RIVAL, filasNuestra: FILAS_NUESTRA } = MAPA_CALOR;
+const centros = (filas) => centrosDeZonas(filas);
 
 export function mapaCalorCancha(resumen) {
   const { desde, hacia, conOrigen, conDestino } = resumen.ataques;

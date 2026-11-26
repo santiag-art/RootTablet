@@ -154,3 +154,23 @@ export function frasesDelRival(resumen, nombre = 'El rival') {
   if (destino) frases.push(`La pelota cae más en ${lista(destino.zonas)} de nuestra cancha (${destino.n} de ${resumen.ataques.conDestino}).`);
   return frases;
 }
+
+// ── Geometría del mapa de calor (la usan la pantalla y el reporte PDF, para que se vean igual) ──
+// Cancha completa vista desde nuestra banca: arriba la del rival, abajo la nuestra. Coordenadas de un dibujo de 330 x 436.
+export const MAPA_CALOR = {
+  ancho: 330,
+  alto: 436,
+  anchoZona: 100,
+  altoZona: 102,
+  x0: 15,
+  filasRival: [{ y: 10, zonas: [1, 6, 5] }, { y: 112, zonas: [2, 3, 4] }], // de arriba (fondo) a la red
+  filasNuestra: [{ y: 227, zonas: [4, 3, 2] }, { y: 329, zonas: [5, 6, 1] }], // de la red al fondo
+  red: { y: 217, alto: 8 },
+};
+
+// Esquina superior izquierda de cada zona: Map zona -> { x, y }.
+export function centrosDeZonas(filas, { x0 = MAPA_CALOR.x0, anchoZona = MAPA_CALOR.anchoZona } = {}) {
+  const mapa = new Map();
+  filas.forEach(({ y, zonas }) => zonas.forEach((z, i) => mapa.set(z, { x: x0 + i * anchoZona, y })));
+  return mapa;
+}

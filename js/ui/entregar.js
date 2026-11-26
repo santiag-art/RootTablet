@@ -1,7 +1,8 @@
 // Entregar un archivo JSON: subirlo a Google Drive, mostrarlo como códigos QR, compartirlo (WhatsApp, correo...) o
 // descargarlo. Devuelve true si el archivo salió, false si la persona canceló o no lo logró.
 import { CONFIG } from '../config.js';
-import { abrirVentana } from './aviso.js';
+import { app } from '../contexto.js';
+import { abrirVentana, informar } from './aviso.js';
 import { h, icono } from './dom.js';
 import { driveConfigurado, precargarGoogle } from './driveSesion.js';
 import { mostrarQR } from './mostrarQR.js';
@@ -18,7 +19,11 @@ function descargar(archivo) {
   }, 4000);
 }
 
-export function entregarArchivo(texto, nombre, { titulo = 'Enviar el archivo', textoCompartir = 'Elige cómo sacarlo de la tablet.' } = {}) {
+export async function entregarArchivo(texto, nombre, { titulo = 'Enviar el archivo', textoCompartir = 'Elige cómo sacarlo de la tablet.' } = {}) {
+  if (app.practica) {
+    await informar({ titulo: 'Modo práctica', texto: 'Esto es práctica: nada sale de la tablet, para que los datos de ejemplo no lleguen a Roots. Sal del modo práctica para exportar de verdad.' });
+    return false;
+  }
   const archivo = new File([texto], nombre, { type: 'application/json' });
   const puedeCompartir = Boolean(navigator.canShare?.({ files: [archivo] }) && navigator.share);
   precargarGoogle().catch(() => {});

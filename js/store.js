@@ -93,9 +93,9 @@ export function crearRespaldoMemoria() {
   };
 }
 
-async function abrirIndexedDB() {
+async function abrirIndexedDB(nombre = NOMBRE_BD) {
   if (typeof indexedDB === 'undefined') throw new Error('Este navegador no tiene IndexedDB.');
-  const solicitud = indexedDB.open(NOMBRE_BD, VERSION_BD);
+  const solicitud = indexedDB.open(nombre, VERSION_BD);
   solicitud.onupgradeneeded = () => {
     const bd = solicitud.result;
     Object.entries(TABLAS).forEach(([nombre, llave]) => {
@@ -139,9 +139,9 @@ export function crearAlmacen(respaldo) {
   return almacen;
 }
 
-export async function abrirAlmacen() {
+export async function abrirAlmacen(nombre = NOMBRE_BD) {
   try {
-    return crearAlmacen(await abrirIndexedDB());
+    return crearAlmacen(await abrirIndexedDB(nombre));
   } catch (err) {
     console.warn('Sin IndexedDB, se trabaja en memoria:', err);
     const almacen = crearAlmacen(crearRespaldoMemoria());

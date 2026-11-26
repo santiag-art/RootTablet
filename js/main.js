@@ -8,8 +8,10 @@ import { toast } from './ui/aviso.js';
 import { vaciar, h } from './ui/dom.js';
 import { vistaExportar } from './ui/exportarPantalla.js';
 import { vistaInicio } from './ui/inicio.js';
+import { vistaRanking } from './ui/ranking.js';
 import { vistaRival, vistaRivales } from './ui/rivales.js';
 import { vistaPartido } from './ui/partido.js';
+import { pintarMarcaPractica } from './ui/practicaPantalla.js';
 
 const raiz = document.getElementById('app');
 let bloqueoPantalla = null;
@@ -20,6 +22,7 @@ function rutaActual() {
   if (m) return { nombre: 'partido', id: Number(m[1]) };
   if (location.hash === '#/exportar') return { nombre: 'exportar' };
   if (location.hash === '#/rivales') return { nombre: 'rivales' };
+  if (location.hash === '#/ranking') return { nombre: 'ranking' };
   const r = /^#\/rival\/(.+)$/.exec(location.hash);
   if (r) {
     try {
@@ -55,13 +58,14 @@ function renderizar() {
   rutaAnterior = clave;
   let vista;
   try {
-    vista = ruta.nombre === 'partido' ? vistaPartido(ruta.id) : ruta.nombre === 'exportar' ? vistaExportar() : ruta.nombre === 'rivales' ? vistaRivales() : ruta.nombre === 'rival' ? vistaRival(ruta.id) : vistaInicio();
+    vista = ruta.nombre === 'partido' ? vistaPartido(ruta.id) : ruta.nombre === 'exportar' ? vistaExportar() : ruta.nombre === 'rivales' ? vistaRivales() : ruta.nombre === 'ranking' ? vistaRanking() : ruta.nombre === 'rival' ? vistaRival(ruta.id) : vistaInicio();
   } catch (err) {
     console.error(err);
     vista = h('div', { class: 'vacio' }, h('h2', {}, 'Algo falló al dibujar la pantalla'), h('p', { class: 'nota' }, String(err?.message ?? err)), h('button', { class: 'btn btn-primario', onclick: () => { location.hash = '#/'; location.reload(); } }, 'Volver al inicio'));
   }
   vaciar(raiz).append(vista);
   restaurarScroll(scroll);
+  pintarMarcaPractica();
   medirCabecera();
   actualizarBloqueoPantalla(ruta);
 }
@@ -141,11 +145,13 @@ async function iniciar() {
   }
   app.renderizar = renderizar;
   app.almacen = await abrirAlmacen();
-  app.almacen.alFallar = () => {
+  app.alFallarAlmacen = () => {
     app.guardado = { estado: 'error', hora: app.guardado.hora };
     toast('No se pudo guardar lo último. Revisa el espacio de la tablet. Saca un borrador desde el menú del partido.', 'error');
     renderizar();
   };
+  app.almacen.alFallar = app.alFallarAlmacen;
+  app.almacenReal = app.almacen;
   app.alCambiarGuardado = refrescarIndicadorGuardado;
   await cargarDatos();
   // Segundo seguro: si lo último que se anotó quedó en el espejo pero no en el almacén, se recupera.

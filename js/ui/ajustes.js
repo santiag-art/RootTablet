@@ -5,6 +5,7 @@ import { pedirAlmacenamientoPersistente, usoDeAlmacenamiento } from '../store.js
 import { abrirVentana, confirmar, toast } from './aviso.js';
 import { h, icono } from './dom.js';
 import { elegirYRestaurar, guardarCopiaAhora } from './copiaPantalla.js';
+import { entrarPractica, reiniciarPracticaAhora, salirPractica } from './practicaPantalla.js';
 
 export function temaActual() {
   return document.documentElement.dataset.tema === 'claro' ? 'claro' : 'oscuro';
@@ -49,6 +50,11 @@ export async function abrirAjustes() {
         h('p', { class: 'nota' }, app.ultimaCopia ? `Última copia: ${new Date(app.ultimaCopia).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Todavía no has guardado ninguna copia.'),
         h('button', { class: 'btn btn-primario btn-ancho', onclick: () => { cerrar(); guardarCopiaAhora(); } }, icono('bajar', { tam: 18 }), ' Guardar copia'),
         h('button', { class: 'btn btn-ancho', onclick: () => { cerrar(); elegirYRestaurar(); } }, icono('subir', { tam: 18 }), ' Restaurar una copia'),
+        h('div', { class: 'titulo-grupo' }, 'Modo práctica'),
+        h('p', { class: 'nota' }, app.practica ? 'Estás practicando con datos de ejemplo. Nada de esto toca tus datos reales ni sale de la tablet.' : 'Ensaya con partidos de ejemplo sin ensuciar los datos reales. Sirve para que la entrenadora practique y para la sustentación.'),
+        app.practica
+          ? [h('button', { class: 'btn btn-primario btn-ancho', onclick: () => { cerrar(); salirPractica(); } }, 'Salir del modo práctica'), h('button', { class: 'btn btn-ancho', onclick: () => { cerrar(); reiniciarPracticaAhora(); } }, icono('rotar', { tam: 18 }), ' Reiniciar la práctica')]
+          : h('button', { class: 'btn btn-ancho', onclick: () => { cerrar(); entrarPractica(); } }, icono('rotar', { tam: 18 }), ' Entrar al modo práctica'),
         h('div', { class: 'titulo-grupo' }, 'Instalación'),
         instalada
           ? h('p', { class: 'nota' }, 'La app ya está instalada en esta tablet.')
@@ -63,11 +69,11 @@ export async function abrirAjustes() {
         h('div', { class: 'titulo-grupo' }, 'Versión'),
         h('p', { class: 'nota' }, `Roots Tablet v${app.version}`),
         h('button', { class: 'btn btn-peligro btn-ancho', onclick: async () => {
-          const ok = await confirmar({ titulo: 'Borrar todo', texto: 'Se borran TODOS los partidos, jugadores y lo anotado de esta tablet. Si no exportaste, se pierde.', si: 'Continuar', peligro: true });
+          const ok = await confirmar({ titulo: 'Borrar todo', texto: app.practica ? 'Se borra todo lo de la práctica. Tus datos reales no cambian.' : 'Se borran TODOS los partidos, jugadores y lo anotado de esta tablet. Si no exportaste, se pierde.', si: 'Continuar', peligro: true });
           if (!ok) return;
           const ok2 = await confirmar({ titulo: '¿Seguro del todo?', texto: 'Esta acción no se puede deshacer.', si: 'Sí, borrar todo', peligro: true });
           if (!ok2) return;
-          borrarEspejo();
+          if (!app.practica) borrarEspejo();
           await app.almacen.vaciar();
           await cargarDatos();
           cerrar();

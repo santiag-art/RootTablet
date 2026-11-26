@@ -158,7 +158,7 @@ export function datosResumenPartido({ partido, torneo, jugadores, eventos }) {
 
 // ───────────── Dibujo en canvas ─────────────
 
-function rectRedondeado(ctx, x, y, w, h, r) {
+export function rectRedondeado(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -180,7 +180,7 @@ function tarjeta(ctx, x, y, w, h) {
 }
 
 // Reduce el tamaño de letra hasta que el texto quepa en el ancho dado.
-function textoAjustado(ctx, texto, x, y, anchoMax, { tam, peso = 'bold', color, alinear = 'left' }) {
+export function textoAjustado(ctx, texto, x, y, anchoMax, { tam, peso = 'bold', color, alinear = 'left' }) {
   let t = tam;
   ctx.font = `${peso} ${t}px ${FUENTE}`;
   while (ctx.measureText(texto).width > anchoMax && t > 18) {
@@ -193,7 +193,7 @@ function textoAjustado(ctx, texto, x, y, anchoMax, { tam, peso = 'bold', color, 
 }
 
 // Escribe un párrafo en varias líneas; devuelve la altura que ocupó.
-function parrafo(ctx, texto, x, y, anchoMax, alturaLinea) {
+export function parrafo(ctx, texto, x, y, anchoMax, alturaLinea) {
   const palabras = texto.split(' ');
   let linea = '';
   let lineas = 0;
@@ -211,7 +211,7 @@ function parrafo(ctx, texto, x, y, anchoMax, alturaLinea) {
   return (lineas + 1) * alturaLinea;
 }
 
-function alturaParrafo(ctx, texto, anchoMax, alturaLinea) {
+export function alturaParrafo(ctx, texto, anchoMax, alturaLinea) {
   const palabras = texto.split(' ');
   let linea = '';
   let lineas = 1;
@@ -509,7 +509,7 @@ export function construirPdfDeJpeg(jpeg, anchoPx, altoPx, anchoMm = 150) {
   return salida;
 }
 
-function cargarLogo() {
+export function cargarLogo() {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -518,7 +518,7 @@ function cargarLogo() {
   });
 }
 
-function aBlob(canvas, tipo = 'image/png', calidad) {
+export function aBlob(canvas, tipo = 'image/png', calidad) {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo crear la imagen.'))), tipo, calidad));
 }
 

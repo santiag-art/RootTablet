@@ -1,6 +1,8 @@
 // Service worker de Roots Tablet: guarda la app en el teléfono/tablet para que abra sin internet.
 // Al cambiar cualquier archivo de la app, sube VERSION para que los equipos descarguen la versión nueva.
-const VERSION = 'roots-tablet-v1.22.1';
+const VERSION = 'roots-tablet-v1.29.0';
+// El manual en PDF pesa varios MB: se guarda aparte, sin frenar la instalación de la app.
+const MANUAL = 'manual/Manual-Roots-Tablet-v1.0.pdf';
 const ARCHIVOS = [
   './',
   'css/app.css',
@@ -10,11 +12,23 @@ const ARCHIVOS = [
   'img/cancha-roots.jpg',
   'img/roots-logo.png',
   'js/avisosJuego.js',
+  'js/candado.js',
+  'js/duracion.js',
+  'js/ui/relojPartido.js',
+  'js/ui/miniCancha.js',
+  'js/ui/candado.js',
+  'js/ayudaContenido.js',
+  'js/cambiosSugeridos.js',
   'js/rachas.js',
   'js/puntosRival.js',
+  'js/reporteScouting.js',
+  'js/puntoDecisivo.js',
   'js/historialRival.js',
   'js/lineaSet.js',
   'js/rendimientoRotacion.js',
+  'js/ranking.js',
+  'js/historial.js',
+  'js/recordatorio.js',
   'js/borrador.js',
   'js/config.js',
   'js/contexto.js',
@@ -29,6 +43,8 @@ const ARCHIVOS = [
   'js/motor.js',
   'js/nuevoPartido.js',
   'js/posicionPartido.js',
+  'js/practica.js',
+  'data/muestra-practica.json',
   'js/qr/codigoQR.js',
   'js/qr/marcos.js',
   'js/soltar.js',
@@ -48,9 +64,12 @@ const ARCHIVOS = [
   'js/store.js',
   'js/ui/acciones.js',
   'js/ui/ajustes.js',
+  'js/ui/ayuda.js',
   'js/ui/aviso.js',
   'js/ui/arrastrar.js',
   'js/ui/borradorPantalla.js',
+  'js/ui/cierrePartido.js',
+  'js/ui/practicaPantalla.js',
   'js/ui/copiaPantalla.js',
   'js/ui/dom.js',
   'js/ui/driveSesion.js',
@@ -65,6 +84,7 @@ const ARCHIVOS = [
   'js/ui/plantilla.js',
   'js/ui/preguntarPosicion.js',
   'js/ui/puntoRival.js',
+  'js/ui/ranking.js',
   'js/ui/rivales.js',
   'js/ui/resumenPartido.js',
   'js/ui/tiempoMuerto.js',
@@ -74,7 +94,13 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', (evento) => {
-  evento.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(ARCHIVOS)));
+  evento.waitUntil(
+    caches.open(VERSION).then((cache) =>
+      cache.addAll(ARCHIVOS).then(() => {
+        cache.add(MANUAL).catch(() => {}); // si no se alcanza a guardar ahora, se guarda la primera vez que se abra con internet
+      })
+    )
+  );
 });
 
 self.addEventListener('activate', (evento) => {
@@ -94,7 +120,15 @@ self.addEventListener('fetch', (evento) => {
     caches.match(pedido, { ignoreSearch: true }).then(
       (guardado) =>
         guardado ||
-        fetch(pedido).catch(() => (pedido.mode === 'navigate' ? caches.match('index.html') : Response.error()))
+        fetch(pedido)
+          .then((respuesta) => {
+            if (respuesta.status === 200 && new URL(pedido.url).pathname.endsWith(MANUAL)) {
+              const copia = respuesta.clone();
+              caches.open(VERSION).then((cache) => cache.put(MANUAL, copia));
+            }
+            return respuesta;
+          })
+          .catch(() => (pedido.mode === 'navigate' ? caches.match('index.html') : Response.error()))
     )
   );
 });

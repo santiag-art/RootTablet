@@ -4,6 +4,8 @@ import {
   editarPlantilla, ejecutarSustitucion, elegirPosicion, entrarLibero, quitarLibero, rotarAMano, rotarCancha, salirLibero, toggleJugador,
 } from '../motor.js';
 import { app } from '../contexto.js';
+import { avisosActivados } from '../avisosJuego.js';
+import { opcionesParaSalir } from '../cambiosSugeridos.js';
 import { avisoFaltaDePosicion, revisarFormacion } from '../reglas/faltaPosicion.js';
 import { INFO_LIBERO } from '../reglas/liberos.js';
 import { FILAS_CANCHA, nombrePosicion, todasLasRotaciones } from '../reglas/rotaciones.js';
@@ -167,15 +169,26 @@ function abrirCasillaEnJuego(V, indice) {
   const v = abrirVentana({ titulo: `P${indice + 1} · ${d.nombre(id)}`, subtitulo: nombrePosicion(indice + 1), contenido: h('div', { class: 'lista-opciones' }, filas), ancho: 'media' });
 }
 
-function abrirCambio(V, saleId, { entraPreelegido = null } = {}) {
+// Ventana "¿Quién entra?". Con los avisos activados, las que pueden entrar según las reglas salen primero, de la mejor opción a
+// la peor, con por qué (misma posición, cómo viene jugando, descansada...). Quien elige sigue siendo la entrenadora.
+export function abrirCambio(V, saleId, { entraPreelegido = null } = {}) {
   const { d } = V;
   let excepcional = false;
-  const entran = d.jugadoresBanca.filter((j) => !d.esLiberoId(j.id));
+  const ayuda = avisosActivados();
+  const sugeridas = ayuda ? new Map(opcionesParaSalir(V.est, V.ctx, d, saleId).map((o, i) => [o.entraId, { ...o, rango: i }])) : new Map();
+  const entran = d.jugadoresBanca
+    .filter((j) => !d.esLiberoId(j.id))
+    .sort((a, b) => (sugeridas.get(a.id)?.rango ?? Infinity) - (sugeridas.get(b.id)?.rango ?? Infinity));
   const cuerpo = h('div', { class: 'lista-opciones' });
+  const notaDe = (j) => {
+    const s = sugeridas.get(j.id);
+    const propias = [d.salieronExcepcionalIds.has(j.id) ? 'Salió por excepción' : '', s ? `${s.rango === 0 ? 'Sugerida: ' : ''}${s.notas.join(', ')}` : ''];
+    return propias.filter(Boolean).join(' · ');
+  };
   const pintar = (cerrar) => {
     rellenar(cuerpo, 
       h('button', { class: 'check-grande', 'aria-pressed': String(excepcional), onclick: () => { excepcional = !excepcional; pintar(cerrar); } }, h('span', { class: 'caja' }, excepcional ? icono('ok', { tam: 18, grueso: 3 }) : null), 'Cambio excepcional (lesión)'),
-      entran.map((j) => opcionJugador(V, j.id, { nota: d.salieronExcepcionalIds.has(j.id) ? 'Salió por excepción' : '', principal: j.id === entraPreelegido, onclick: async () => { const posicion = await preguntarPosicion(V, j.id, { texto: `Entra ${d.nombre(j.id)} por ${d.nombre(saleId)}.` }); if (!posicion) return; if (V.aplicar((e, c) => ejecutarSustitucion(e, c, saleId, j.id, { excepcional, posicion }))) cerrar(); } }))
+      entran.map((j) => opcionJugador(V, j.id, { nota: notaDe(j), principal: entraPreelegido != null ? j.id === entraPreelegido : sugeridas.get(j.id)?.rango === 0, onclick: async () => { const posicion = await preguntarPosicion(V, j.id, { texto: `Entra ${d.nombre(j.id)} por ${d.nombre(saleId)}.` }); if (!posicion) return; if (V.aplicar((e, c) => ejecutarSustitucion(e, c, saleId, j.id, { excepcional, posicion }))) cerrar(); } }))
     );
   };
   abrirVentana({ titulo: `Sale ${d.nombre(saleId)}`, subtitulo: `¿Quién entra? · cambios ${d.sustitucionesUsadas}/${MAX_SUSTITUCIONES}`, contenido: (cerrar) => { pintar(cerrar); return cuerpo; } });

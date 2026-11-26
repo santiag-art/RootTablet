@@ -7,10 +7,14 @@ import { h, icono } from './dom.js';
 import { abrirAjustes } from './ajustes.js';
 import { partidosSinBorrador } from '../borrador.js';
 import { partidosSinCopia } from '../copia.js';
+import { pendientesDeCierre, textoFalta } from '../recordatorio.js';
+import { abrirCierrePartido } from './cierrePartido.js';
 import { exportarBorradorAhora, importarBorradorSiEs } from './borradorPantalla.js';
 import { guardarCopiaAhora } from './copiaPantalla.js';
+import { abrirAyuda } from './ayuda.js';
 import { abrirNuevoPartido } from './nuevoPartido.js';
 import { bloqueComparacion } from './piezas.js';
+import { chipPractica, entrarPractica, salirPractica } from './practicaPantalla.js';
 import { abrirRecibir } from './transferir.js';
 
 export async function importarTexto(texto, nombreArchivo) {
@@ -111,6 +115,7 @@ function tarjeta(r) {
         { class: 'estado' },
         h('span', { class: `etiqueta ${estado === 'en_juego' ? 'etiqueta-cancha' : estado === 'terminado' ? 'etiqueta-ok' : ''}` }, textoDeEstado(r)),
         r.creadoEnTablet ? h('span', { class: 'etiqueta' }, 'Creado en la tablet') : null,
+        !app.practica && pendientesDeCierre([r], { ultimaCopia: app.ultimaCopia, resultadosEn: app.resultadosEn }).length ? h('span', { class: 'etiqueta etiqueta-aviso', 'data-sin-exportar': '' }, 'Falta exportar') : null,
         r.setsEnRoots > 0 ? h('span', { class: 'etiqueta etiqueta-aviso' }, `Roots ya tiene ${r.setsEnRoots} set${r.setsEnRoots > 1 ? 's' : ''}`) : null
       ),
       sets ? h('div', { class: 'detalle-sets' }, `Tablet: ${local}-${visitante} · ${sets}`) : null,
@@ -129,7 +134,14 @@ export function vistaInicio() {
   if (app.actualizacion) {
     bandas.push(h('div', { class: 'banda banda-ok' }, h('p', {}, 'Hay una versión nueva de la app.'), h('button', { class: 'btn btn-primario', onclick: () => app.actualizacion.postMessage('actualizar') }, 'Actualizar')));
   }
-  const sinCopia = partidosSinCopia(partidos, app.ultimaCopia);
+  // Partidos terminados a los que les falta exportar los resultados o guardar la copia: primero y con su propio aviso.
+  const pendientes = pendientesDeCierre(partidos, { ultimaCopia: app.ultimaCopia, resultadosEn: app.resultadosEn });
+  if (pendientes.length > 0 && !app.practica) {
+    const unico = pendientes.length === 1 ? pendientes[0] : null;
+    bandas.push(h('div', { class: 'banda banda-aviso', 'data-recordatorio-cierre': '' }, h('p', {}, unico ? `${unico.registro.equipoLocal} vs ${unico.registro.equipoVisitante} terminó: falta ${textoFalta(unico)}.` : `${pendientes.length} partidos terminados: falta exportar los resultados o guardar la copia.`), h('button', { class: 'btn btn-primario', 'data-recordatorio-boton': '', onclick: () => abrirCierrePartido(pendientes.map((p) => p.registro)) }, icono('bajar'), 'Exportar y guardar copia')));
+  }
+  const idsPendientes = new Set(pendientes.map((p) => p.registro.id));
+  const sinCopia = partidosSinCopia(partidos, app.ultimaCopia).filter((p) => app.practica || !idsPendientes.has(p.id));
   if (sinCopia.length > 0) {
     bandas.push(h('div', { class: 'banda' }, h('p', {}, `${sinCopia.length} partido${sinCopia.length === 1 ? '' : 's'} con cambios sin copia de seguridad.`), h('button', { class: 'btn btn-primario', onclick: guardarCopiaAhora }, 'Guardar copia')));
   }
@@ -171,7 +183,7 @@ export function vistaInicio() {
       'header',
       { class: 'inicio-cabeza' },
       h('img', { class: 'logo', src: 'img/roots-logo.png', alt: '' }),
-      h('div', { class: 'inicio-titulo' }, h('h1', {}, 'Roots'), h('p', {}, 'Anotación en la tablet')),
+      h('div', { class: 'inicio-titulo' }, h('h1', {}, 'Roots', chipPractica()), h('p', {}, app.practica ? 'Modo práctica: datos de ejemplo, nada es real' : 'Anotación en la tablet')),
       h(
         'div',
         { class: 'inicio-acciones' },
@@ -179,7 +191,10 @@ export function vistaInicio() {
         h('button', { class: 'btn', onclick: recibir }, icono('documento'), 'Recibir'),
         h('button', { class: 'btn', onclick: abrirNuevoPartido }, icono('mas'), 'Nuevo partido'),
         h('button', { class: 'btn', 'data-ir-rivales': '', onclick: () => irA('#/rivales') }, icono('lista'), 'Rivales'),
+        h('button', { class: 'btn', 'data-ir-ranking': '', onclick: () => irA('#/ranking') }, icono('grafica'), 'Ranking'),
         h('button', { class: 'btn', onclick: () => irA('#/exportar') }, icono('bajar'), 'Resultados'),
+        app.practica ? h('button', { class: 'btn btn-practica', 'data-salir-practica': '', onclick: salirPractica }, icono('atras'), 'Salir de la práctica') : h('button', { class: 'btn', 'data-practica': '', onclick: entrarPractica }, icono('rotar'), 'Práctica'),
+        h('button', { class: 'btn', 'data-ayuda': '', onclick: abrirAyuda }, icono('ayuda'), 'Ayuda'),
         h('button', { class: 'btn-icono', 'aria-label': 'Ajustes', onclick: abrirAjustes }, icono('menu'))
       )
     ),

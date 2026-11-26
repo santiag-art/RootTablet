@@ -137,6 +137,9 @@ await page.screenshot({ path: SHOTS + '/34-terminado.png' });
 // no deja anotar
 ok(await page.locator('.btn-punto.mas').first().isDisabled(), 'marcador bloqueado al terminar');
 
+// cierra la ventana guiada de fin de partido
+await page.click('.ventana-fondo >> text=Ahora no').catch(() => {});
+await esperar(400);
 // tema claro
 await page.click('.b-menu');
 await page.click('text=Tema claro');

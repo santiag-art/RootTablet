@@ -1,5 +1,6 @@
 // Pantalla "Resultados": elegir partidos, generar el archivo para Roots y, solo si lo confirmas, borrarlos de la tablet.
 import { app, borrarPartidos, irA } from '../contexto.js';
+import { marcarResultadosExportados } from '../recordatorio.js';
 import { construirResultados, nombreArchivoResultados, resultadoDePartido } from '../exportar.js';
 import { comparacionConRoots, estadoDePartido, fechaCorta, horaCorta, hoyISO, ordenarPorFechaHora, textoDeEstado, textoDeSets, tieneSetSinTerminar } from '../resumen.js';
 import { abrirVentana, confirmar, informar, toast } from './aviso.js';
@@ -21,10 +22,10 @@ function iniciarSeleccion(lista) {
   seleccion = new Set(lista.filter((r) => estadoDePartido(r) === 'terminado').map((r) => r.id));
 }
 
-async function exportar(lista) {
-  const ids = lista.filter((r) => seleccion.has(r.id)).map((r) => r.id);
-  if (!ids.length) return toast('Marca al menos un partido.', 'error');
-  const elegidos = lista.filter((r) => ids.includes(r.id));
+// Avisa de lo que no viaja o de lo que Roots ya tiene, arma el archivo y lo entrega (Drive, QR, compartir o descargar).
+// Devuelve los resultados si el archivo salió, o null si la persona canceló o no se pudo armar.
+export async function entregarResultados(registros, ids) {
+  const elegidos = registros.filter((r) => ids.includes(r.id));
 
   const avisos = [];
   const sin = elegidos.filter(tieneSetSinTerminar);
@@ -39,17 +40,30 @@ async function exportar(lista) {
       conRoots.map(bloqueComparacion)
     );
     const ok = await confirmar({ titulo: 'Antes de exportar', texto, si: 'Exportar igual', no: 'Revisar' });
-    if (!ok) return;
+    if (!ok) return null;
   }
 
   let resultados;
   try {
-    resultados = construirResultados({ registros: lista, ids });
+    resultados = construirResultados({ registros, ids });
   } catch (err) {
-    return toast(err.message, 'error');
+    toast(err.message, 'error');
+    return null;
   }
   const entregado = await entregarArchivo(JSON.stringify(resultados, null, 2), nombreArchivoResultados());
-  if (!entregado) return;
+  if (!entregado) return null;
+  // Se anota la hora en que se armó el archivo: lo que cambie después queda como pendiente de exportar otra vez.
+  const idsSalidos = resultados.partidos.map((p) => p.id);
+  idsSalidos.forEach((id) => app.resultadosEn.set(id, resultados.exportadoEn));
+  await marcarResultadosExportados(app.almacen, idsSalidos, resultados.exportadoEn);
+  return resultados;
+}
+
+async function exportar(lista) {
+  const ids = lista.filter((r) => seleccion.has(r.id)).map((r) => r.id);
+  if (!ids.length) return toast('Marca al menos un partido.', 'error');
+  const resultados = await entregarResultados(lista, ids);
+  if (!resultados) return;
 
   const exportadosIds = resultados.partidos.map((p) => p.id);
   const borrar = await confirmar({
@@ -60,7 +74,7 @@ async function exportar(lista) {
     peligro: true,
   });
   if (borrar) {
-    await borrarPartidos(exportadosIds);
+    await borrarPartidos(exportadosIds, { archivar: true });
     seleccion = null;
     toast('Partidos quitados de la tablet.', 'ok');
   } else {

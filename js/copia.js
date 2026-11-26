@@ -17,7 +17,9 @@ export function nombreArchivoCopia(ahora = new Date(), prefijo = 'roots-tablet-c
 export async function construirCopia(almacen, { ahora = new Date(), versionApp = '' } = {}) {
   const tablas = {};
   for (const t of TABLAS_COPIA) tablas[t] = await almacen.todos(t);
-  return { aplicacion: APLICACION_COPIA, version: VERSION_COPIA, creadaEn: ahora.toISOString(), versionApp, tablas };
+  // El historial de partidos ya exportados y quitados (ranking) también va en la copia, para no perderlo al restaurar.
+  const historial = (await almacen.todos('meta')).filter((f) => String(f.clave).startsWith('historial-'));
+  return { aplicacion: APLICACION_COPIA, version: VERSION_COPIA, creadaEn: ahora.toISOString(), versionApp, tablas, historial };
 }
 
 export function contarCopia(copia) {
@@ -64,6 +66,7 @@ export function leerCopia(texto) {
 export async function restaurarCopia(almacen, copia) {
   await almacen.vaciar();
   for (const t of TABLAS_COPIA) await almacen.guardarVarios(t, copia.tablas[t]);
+  await almacen.guardarVarios('meta', Array.isArray(copia.historial) ? copia.historial.filter((f) => f?.clave) : []);
   await almacen.guardar('meta', { clave: 'ultimaCopia', fecha: copia.creadaEn });
   await almacen.pendientes();
 }

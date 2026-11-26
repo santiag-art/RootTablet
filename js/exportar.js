@@ -7,6 +7,8 @@
 // Función pura: no toca la pantalla ni el almacenamiento.
 import { APLICACION_RESULTADOS, VERSION_FORMATO } from './importar.js';
 import { estadoDePartido } from './resumen.js';
+import { limpiarDetalle } from './puntosRival.js';
+import { duracionDePartido, duracionDeSet } from './duracion.js';
 
 function nuevoId(ahora) {
   return globalThis.crypto?.randomUUID?.() ?? `res-${ahora.getTime()}-${Math.floor(Math.random() * 1e9)}`;
@@ -45,9 +47,24 @@ const evento = (e) => ({
   creadoEn: e.creado_en ?? null,
 });
 
+// Cómo anotó el rival cada punto del set (solo los que tienen detalle). `orden` es el lugar del punto dentro del set
+// (1 = el primer punto del set, cuente quien lo cuente). Las zonas solo viajan en los ataques: `desde` es la zona del
+// rival y `hacia` la zona de nuestra cancha donde cayó. Los puntos sin detalle no viajan: Roots los cuenta por el marcador.
+export function puntosRivalDeSet(set) {
+  const seq = set?.puntosSeq ?? [];
+  const info = set?.puntosInfo ?? [];
+  const salida = [];
+  seq.forEach((_, i) => {
+    const detalle = limpiarDetalle(info[i]?.detalle);
+    if (detalle) salida.push({ orden: i + 1, motivo: detalle.motivo, ...(detalle.desde != null ? { desde: detalle.desde } : {}), ...(detalle.hacia != null ? { hacia: detalle.hacia } : {}) });
+  });
+  return salida;
+}
+
 export function resultadoDePartido(registro) {
   const est = registro.est;
   const sinSet = est.actual.eventos.map(evento);
+  const rivalSinSet = puntosRivalDeSet(est.actual);
   return {
     id: registro.id,
     // Partido que se creó en la tablet: Roots no lo tiene. `idTablet` es único y sirve para crearlo una sola vez en Roots.
@@ -61,17 +78,24 @@ export function resultadoDePartido(registro) {
     formatoSets: est.formatoSets,
     // "Terminar partido" (o partido decidido por sets): Roots lo marca como finalizado.
     finalizadoManual: estadoDePartido(registro) === 'terminado',
+    // Cuánto se demoró el partido, en segundos (del primer al último punto, con los descansos). Solo si se anotó con el reloj.
+    ...(duracionDePartido(est.sets) != null ? { duracionSeg: duracionDePartido(est.sets) } : {}),
     sets: est.sets.map((s) => ({
       numeroSet: s.numeroSet,
       puntosLocal: s.puntosLocal,
       puntosVisitante: s.puntosVisitante,
       tiemposMuertos: s.tiemposMuertos ?? { local: 0, visitante: 0 },
+      ...(duracionDeSet(s) != null ? { duracionSeg: duracionDeSet(s) } : {}),
       titulares: s.titulares.map(titular),
       sustituciones: s.sustituciones.map(sustitucion),
       eventos: s.eventos.map(evento),
+      // Solo si hay detalle: los sets sin él (o de versiones anteriores) viajan igual que siempre.
+      ...(puntosRivalDeSet(s).length > 0 ? { puntosRival: puntosRivalDeSet(s) } : {}),
     })),
     // Jugadas de un set que no se alcanzó a cerrar: Roots también las deja sin set. Solo viajan si las hay.
     ...(sinSet.length > 0 ? { eventosSinSet: sinSet } : {}),
+    // Cómo anotó el rival en ese set sin cerrar (misma forma que `puntosRival` de un set).
+    ...(rivalSinSet.length > 0 ? { puntosRivalSinSet: rivalSinSet } : {}),
     iniciadoEn: est.creadoEn ?? null,
     actualizadoEn: est.actualizadoEn ?? null,
   };
