@@ -1,6 +1,7 @@
 // Copia de seguridad de TODO lo que hay en la tablet (partidos con lo anotado, jugadores, torneos).
 // No es el archivo de resultados para Roots: es para no perder nada si la tablet se daña o se borra la app.
 import { TABLAS } from './store.js';
+import { CLAVE_PESOS_MVP, normalizarPesos } from './pesosMvp.js';
 
 export const APLICACION_COPIA = 'roots-tablet-copia';
 export const VERSION_COPIA = 1;
@@ -19,7 +20,9 @@ export async function construirCopia(almacen, { ahora = new Date(), versionApp =
   for (const t of TABLAS_COPIA) tablas[t] = await almacen.todos(t);
   // El historial de partidos ya exportados y quitados (ranking) también va en la copia, para no perderlo al restaurar.
   const historial = (await almacen.todos('meta')).filter((f) => String(f.clave).startsWith('historial-'));
-  return { aplicacion: APLICACION_COPIA, version: VERSION_COPIA, creadaEn: ahora.toISOString(), versionApp, tablas, historial };
+  // Los pesos de la fórmula del MVP que cambió la entrenadora (solo si cambió alguno).
+  const pesos = (await almacen.todos('meta')).find((f) => f.clave === CLAVE_PESOS_MVP)?.pesos;
+  return { aplicacion: APLICACION_COPIA, version: VERSION_COPIA, creadaEn: ahora.toISOString(), versionApp, tablas, historial, ...(pesos ? { pesosMvp: normalizarPesos(pesos) } : {}) };
 }
 
 export function contarCopia(copia) {
@@ -67,6 +70,7 @@ export async function restaurarCopia(almacen, copia) {
   await almacen.vaciar();
   for (const t of TABLAS_COPIA) await almacen.guardarVarios(t, copia.tablas[t]);
   await almacen.guardarVarios('meta', Array.isArray(copia.historial) ? copia.historial.filter((f) => f?.clave) : []);
+  if (copia.pesosMvp && typeof copia.pesosMvp === 'object') await almacen.guardar('meta', { clave: CLAVE_PESOS_MVP, pesos: normalizarPesos(copia.pesosMvp) });
   await almacen.guardar('meta', { clave: 'ultimaCopia', fecha: copia.creadaEn });
   await almacen.pendientes();
 }

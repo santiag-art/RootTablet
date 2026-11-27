@@ -47,6 +47,17 @@ const evento = (e) => ({
   creadoEn: e.creado_en ?? null,
 });
 
+// Lesión marcada en el partido (zona y cómo quedó). Roots la guarda en el control de lesiones de la jugadora, para que la revises.
+const lesion = (l) => ({
+  jugadorId: l.jugadorId,
+  zona: l.zona,
+  disponibilidad: l.disponibilidad,
+  numeroSet: l.numeroSet ?? null,
+  puntosLocal: l.puntosLocal ?? 0,
+  puntosVisitante: l.puntosVisitante ?? 0,
+  creadoEn: l.creadoEn ?? null,
+});
+
 // Cómo anotó el rival cada punto del set (solo los que tienen detalle). `orden` es el lugar del punto dentro del set
 // (1 = el primer punto del set, cuente quien lo cuente). Las zonas solo viajan en los ataques: `desde` es la zona del
 // rival y `hacia` la zona de nuestra cancha donde cayó. Los puntos sin detalle no viajan: Roots los cuenta por el marcador.
@@ -96,6 +107,8 @@ export function resultadoDePartido(registro) {
     ...(sinSet.length > 0 ? { eventosSinSet: sinSet } : {}),
     // Cómo anotó el rival en ese set sin cerrar (misma forma que `puntosRival` de un set).
     ...(rivalSinSet.length > 0 ? { puntosRivalSinSet: rivalSinSet } : {}),
+    // Solo si se marcó alguna lesión: los partidos sin lesiones viajan igual que siempre.
+    ...((est.lesiones ?? []).length > 0 ? { lesiones: est.lesiones.map(lesion) } : {}),
     iniciadoEn: est.creadoEn ?? null,
     actualizadoEn: est.actualizadoEn ?? null,
   };

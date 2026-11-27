@@ -12,7 +12,7 @@
 // y le restan las que Roots marca con disponibilidad limitada y las líberos de ficha. Las "no aptas" no se proponen.
 import { contar, eventosDelAlcance } from './estadisticas.js';
 import { erroresSeguidosPorJugadora, UMBRALES_ERRORES } from './rachas.js';
-import { MAX_SUSTITUCIONES, errorDeCambioNormal } from './motor.js';
+import { MAX_SUSTITUCIONES, errorDeCambioExcepcional, errorDeCambioNormal } from './motor.js';
 import { clavePosicion } from './reglas/fundamentosPosicion.js';
 
 export const UMBRALES_CAMBIO = {
@@ -86,7 +86,7 @@ function haJugado(est, jugadorId) {
 
 // Jugadoras que pueden entrar por `saleId`, de la mejor a la peor opción. Cada una trae las notas que explican por qué.
 //   { entraId, puntaje, mismaPosicion, limitada, notas: [texto] }
-export function opcionesParaSalir(est, ctx, d, saleId, { max = Infinity } = {}) {
+export function opcionesParaSalir(est, ctx, d, saleId, { max = Infinity, excepcional = false } = {}) {
   const eventosPartido = eventosDelAlcance(est, 'todo');
   const eventosSet = eventosDelAlcance(est, 'actual');
   const claveSale = clavePosicion(d.posicionDe(saleId));
@@ -94,7 +94,8 @@ export function opcionesParaSalir(est, ctx, d, saleId, { max = Infinity } = {}) 
   const opciones = [];
   for (const j of d.jugadoresBanca) {
     if (ctx.lesiones?.get(j.id)?.disponibilidad === 'no_apta') continue;
-    if (errorDeCambioNormal(est, ctx, saleId, j.id) !== null) continue;
+    // `excepcional`: las que pueden entrar por el cambio excepcional de la regla 15.7 (lesión), cuando no hay un cambio normal legal.
+    if ((excepcional ? errorDeCambioExcepcional(est, ctx, saleId, j.id) : errorDeCambioNormal(est, ctx, saleId, j.id)) !== null) continue;
     let puntaje = 0;
     const notas = [];
     const posicion = d.posicionDe(j.id);

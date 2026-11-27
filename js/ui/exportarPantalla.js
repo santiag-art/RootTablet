@@ -30,6 +30,13 @@ export async function entregarResultados(registros, ids) {
   const avisos = [];
   const sin = elegidos.filter(tieneSetSinTerminar);
   if (sin.length) avisos.push(`${sin.map((r) => `${r.equipoLocal} vs ${r.equipoVisitante}`).join(', ')}: tiene un set sin terminar que NO se exporta (solo van los sets guardados).`);
+  // Las lesiones marcadas viajan a Roots: se avisa para que la entrenadora las revise allá (gravedad y descripción).
+  elegidos.forEach((r) => {
+    const marcas = r.est.lesiones ?? [];
+    if (!marcas.length) return;
+    const quien = marcas.map((l) => `${app.jugadores.get(l.jugadorId)?.nombre ?? 'una jugadora'} (${l.zona}, ${l.disponibilidad === 'no_apta' ? 'no apta' : 'limitada'})`).join(', ');
+    avisos.push(`${r.equipoLocal} vs ${r.equipoVisitante}: lesiones marcadas — ${quien}. Viajan a Roots y quedan en su control de lesiones; revisa allá la gravedad y completa la descripción.`);
+  });
   const conRoots = elegidos.filter((r) => r.setsEnRoots > 0);
   if (avisos.length || conRoots.length) {
     const texto = h(

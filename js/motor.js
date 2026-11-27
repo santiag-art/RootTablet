@@ -23,6 +23,7 @@ import { posicionNeutra } from './reglas/posiciones.js';
 import { jugadorEnPartido, posicionDeJuego, posicionEstandar, posicionValida } from './posicionPartido.js';
 import { avisoSacadorFueraDeRotacion } from './reglas/faltaPosicion.js';
 import { limpiarDetalle } from './puntosRival.js';
+import { DISPONIBILIDADES_EN_PARTIDO, ZONAS_LESION } from './reglas/disponibilidad.js';
 
 export const MAX_SUSTITUCIONES = 6;
 export const TIEMPOS_POR_SET = 2;
@@ -85,6 +86,8 @@ export function nuevoEstadoPartido(partido) {
     siguienteId: 1,
     // Posición con que juega cada jugadora en este partido: jugadoraId -> nombre de la posición (ver posicionPartido.js).
     posiciones: {},
+    // Lesiones marcadas en este partido (ver marcarLesion): { id, jugadorId, zona, disponibilidad, numeroSet, puntosLocal, puntosVisitante, creadoEn }.
+    lesiones: [],
     actual: nuevoSetEnCurso(),
     creadoEn: new Date().toISOString(),
     actualizadoEn: null,
@@ -571,6 +574,22 @@ export function errorDeCambioNormal(est, ctx, saleId, entraId) {
   return errorReingreso({ salidaId: saleId, entraId, titularesIds, previas });
 }
 
+// ¿Se puede hacer este cambio como EXCEPCIONAL (regla 15.7: lesión, enfermedad o expulsión)? Devuelve el mensaje o null si es legal.
+// Solo es legal cuando no hay una sustitución normal posible; es la misma comprobación de ejecutarSustitucion con excepcional.
+export function errorDeCambioExcepcional(est, ctx, saleId, entraId) {
+  const act = est.actual;
+  const d = derivados(est, ctx);
+  if (!act.plantillaConfirmada) return 'Confirma la plantilla antes de hacer cambios.';
+  if (!act.slots.includes(saleId)) return 'Esa jugadora no está en la cancha.';
+  if (saleId === entraId) return 'Un jugador no puede sustituirse a sí mismo.';
+  if (!jugadorDelTorneo(ctx, entraId)) return 'Esa jugadora no está en la plantilla de este torneo.';
+  if (d.reemplazadosIds.has(entraId)) return `${d.nombre(entraId)} está fuera por el líbero: vuelve cuando el líbero salga.`;
+  if (act.slots.includes(entraId)) return 'Esa jugadora ya está en la cancha.';
+  if (d.inhabilitadosLibero.has(entraId)) return 'Ese jugador fue declarado no apto como líbero y no puede volver a jugar en este partido (regla 19.4.2.2).';
+  const { regulares, previas, titularesIds } = contextoDeSustituciones(est);
+  return errorCambioExcepcional({ salidaId: saleId, entraId, titularesIds, previas, regularesUsadas: regulares.length, idsLibero: d.idsLibero, reemplazadasPorLibero: [...d.reemplazados.values()] });
+}
+
 // Lo que las reglas de sustitución necesitan saber del set en curso y del partido.
 function contextoDeSustituciones(est) {
   const act = est.actual;
@@ -651,6 +670,40 @@ export function ejecutarSustitucion(est, ctx, saleId, entraId, { excepcional = f
     });
     return nueva;
   });
+}
+
+// ─────────────────────────── Lesiones en el partido ───────────────────────────
+
+// Marca que una jugadora quedó limitada o no apta en este momento del partido. Es solo la MARCA (zona y disponibilidad): quién
+// la reemplaza se decide aparte, con el cambio normal o excepcional de siempre. La marca viaja a Roots con los resultados.
+// Una jugadora tiene una sola marca por partido: marcarla otra vez la actualiza. "Deshacer" la quita (o devuelve la anterior).
+export function marcarLesion(est, ctx, jugadorId, { zona, disponibilidad } = {}) {
+  return transaccion(est, () => {
+    if (!jugadorDelTorneo(ctx, jugadorId)) fallo('Esa jugadora no está en la plantilla de este torneo.');
+    if (!ZONAS_LESION.includes(zona)) fallo('Elige la zona de la lesión.');
+    if (!DISPONIBILIDADES_EN_PARTIDO.includes(disponibilidad)) fallo('Elige si queda limitada o no apta.');
+    const act = est.actual;
+    est.lesiones = est.lesiones ?? [];
+    const previa = est.lesiones.find((l) => l.jugadorId === jugadorId) ?? null;
+    const marca = {
+      id: nuevoId(est),
+      jugadorId,
+      zona,
+      disponibilidad,
+      numeroSet: est.sets.length + 1,
+      puntosLocal: act.puntosLocal,
+      puntosVisitante: act.puntosVisitante,
+      creadoEn: ahoraISO(ctx),
+    };
+    est.lesiones = [...est.lesiones.filter((l) => l.jugadorId !== jugadorId), marca];
+    registrarAccion(act, { tipo: 'lesion', marca, previa, texto: `Lesión de ${derivados(est, ctx).nombre(jugadorId)}` });
+    return marca;
+  });
+}
+
+// Quita la marca de lesión de una jugadora en este partido (por si se marcó por error).
+export function quitarMarcaLesion(est, jugadorId) {
+  est.lesiones = (est.lesiones ?? []).filter((l) => l.jugadorId !== jugadorId);
 }
 
 // ─────────────────────────── Marcador y rotación ───────────────────────────
@@ -865,6 +918,9 @@ export function deshacerUltimaAccion(est) {
     });
   } else if (ultima.tipo === 'rotacion') {
     revertirRotacion(act, ultima);
+  } else if (ultima.tipo === 'lesion') {
+    est.lesiones = (est.lesiones ?? []).filter((l) => l.id !== ultima.marca.id);
+    if (ultima.previa) est.lesiones.push(ultima.previa);
   }
   act.historial = act.historial.slice(0, -1);
   return ultima;

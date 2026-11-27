@@ -1,6 +1,6 @@
 // Service worker de Roots Tablet: guarda la app en el teléfono/tablet para que abra sin internet.
 // Al cambiar cualquier archivo de la app, sube VERSION para que los equipos descarguen la versión nueva.
-const VERSION = 'roots-tablet-v1.29.0';
+const VERSION = 'roots-tablet-v1.33.0';
 // El manual en PDF pesa varios MB: se guarda aparte, sin frenar la instalación de la app.
 const MANUAL = 'manual/Manual-Roots-Tablet-v1.0.pdf';
 const ARCHIVOS = [
@@ -19,6 +19,7 @@ const ARCHIVOS = [
   'js/ui/candado.js',
   'js/ayudaContenido.js',
   'js/cambiosSugeridos.js',
+  'js/lesionEnPartido.js',
   'js/rachas.js',
   'js/puntosRival.js',
   'js/reporteScouting.js',
@@ -27,6 +28,9 @@ const ARCHIVOS = [
   'js/lineaSet.js',
   'js/rendimientoRotacion.js',
   'js/ranking.js',
+  'js/mvp.js',
+  'js/pesosMvp.js',
+  'js/ui/pesosMvp.js',
   'js/historial.js',
   'js/recordatorio.js',
   'js/borrador.js',
@@ -65,6 +69,7 @@ const ARCHIVOS = [
   'js/ui/acciones.js',
   'js/ui/ajustes.js',
   'js/ui/ayuda.js',
+  'js/ui/lesion.js',
   'js/ui/aviso.js',
   'js/ui/arrastrar.js',
   'js/ui/borradorPantalla.js',

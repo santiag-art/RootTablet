@@ -8,7 +8,7 @@ import { normalizarNombre } from '../nuevoPartido.js';
 import { resumenContraRival, resumenPuntosRivalDePartido, rivalDeRegistro } from '../puntosRival.js';
 import { bloqueDetalleRival } from './puntoRival.js';
 import { rutaDeRival } from './rivales.js';
-import { compartirResumen, descargarResumenPdf, descargarResumenPng, prepararResumen, puedeCompartirArchivos } from '../resumenCompartir.js';
+import { compartirResumen, explicacionMvp, descargarResumenPdf, descargarResumenPng, prepararResumen, puedeCompartirArchivos } from '../resumenCompartir.js';
 import { toast } from './aviso.js';
 import { h } from './dom.js';
 
@@ -188,7 +188,7 @@ function tarjetaCompartir(V) {
     VISTA.ocupado = accion;
     V.pintar();
     try {
-      const resumen = await prepararResumen({ registro: reg, torneo: app.torneos.get(reg.torneoId), jugadores: V.jugadores });
+      const resumen = await prepararResumen({ registro: reg, torneo: app.torneos.get(reg.torneoId), jugadores: V.jugadores, pesos: app.pesosMvp });
       await trabajo(resumen);
       if (avisoOk) toast(avisoOk, 'ok', 4000);
     } catch (err) {
@@ -217,6 +217,7 @@ function tarjetaCompartir(V) {
       h('button', { class: 'btn', disabled: bloqueo, onclick: () => ejecutar('png', descargarResumenPng, 'Imagen descargada. Ya puedes enviarla por WhatsApp.') }, texto('png', 'Descargar imagen', 'Generando…')),
       h('button', { class: 'btn btn-fantasma', disabled: bloqueo, onclick: vista }, texto('vista', VISTA.vistaPrevia ? 'Ocultar vista previa' : 'Ver vista previa', 'Generando…'))
     ),
+    h('details', { class: 'nota', style: { marginTop: '10px' } }, h('summary', {}, '¿Cómo se elige el MVP?'), ...explicacionMvp(app.pesosMvp).map((t) => h('p', { style: { margin: '4px 0' } }, t))),
     VISTA.vistaPrevia ? h('img', { class: 'resumen-vista-previa', src: VISTA.vistaPrevia, alt: 'Vista previa del resumen del partido', style: { display: 'block', width: '100%', maxWidth: '420px', margin: '14px auto 0', borderRadius: '14px', border: '1px solid var(--borde, #cbd5e1)' } }) : null
   );
 }

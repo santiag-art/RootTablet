@@ -5,6 +5,8 @@ import { pedirAlmacenamientoPersistente, usoDeAlmacenamiento } from '../store.js
 import { abrirVentana, confirmar, toast } from './aviso.js';
 import { h, icono } from './dom.js';
 import { elegirYRestaurar, guardarCopiaAhora } from './copiaPantalla.js';
+import { abrirPesosMvp } from './pesosMvp.js';
+import { sonLosPorDefecto } from '../pesosMvp.js';
 import { entrarPractica, reiniciarPracticaAhora, salirPractica } from './practicaPantalla.js';
 
 export function temaActual() {
@@ -46,6 +48,9 @@ export async function abrirAjustes() {
             h('button', { 'aria-pressed': String(temaActual() === t), onclick: () => { aplicarTema(t); cerrar(); app.renderizar(); } }, icono(t === 'claro' ? 'sol' : 'luna', { tam: 18 }), t === 'claro' ? ' Claro' : ' Oscuro')
           )
         ),
+        h('div', { class: 'titulo-grupo' }, 'Puntos del MVP'),
+        h('p', { class: 'nota' }, sonLosPorDefecto(app.pesosMvp) ? 'La MVP se elige con los puntos de siempre. Puedes cambiar cuánto vale cada jugada.' : 'La MVP se elige con puntos que cambiaste. Puedes ajustarlos o volver a los de siempre.'),
+        h('button', { class: 'btn btn-ancho', 'data-abrir-pesos-mvp': '', onclick: () => { cerrar(); abrirPesosMvp(); } }, icono('grafica', { tam: 18 }), ' Cambiar los puntos del MVP'),
         h('div', { class: 'titulo-grupo' }, 'Copia de seguridad'),
         h('p', { class: 'nota' }, app.ultimaCopia ? `Última copia: ${new Date(app.ultimaCopia).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Todavía no has guardado ninguna copia.'),
         h('button', { class: 'btn btn-primario btn-ancho', onclick: () => { cerrar(); guardarCopiaAhora(); } }, icono('bajar', { tam: 18 }), ' Guardar copia'),

@@ -14,6 +14,7 @@ import { iniciarArrastre } from './arrastrar.js';
 import { interpretarSoltar } from '../soltar.js';
 import { abreviaturaPosicion } from '../posicionPartido.js';
 import { preguntarPosicion } from './preguntarPosicion.js';
+import { abrirLesion } from './lesion.js';
 import { h, icono, nombreCorto, rellenar } from './dom.js';
 import { circuloJugador, circuloVacio, insigniaDisponibilidad, opcionJugador, subtituloJugador } from './piezas.js';
 
@@ -160,11 +161,13 @@ function abrirCasillaEnJuego(V, indice) {
     filas.push(h('button', { class: 'opcion principal', onclick: () => { V.aplicar((e, c) => salirLibero(e, c, id)); v.cerrar(); } }, icono('bajar'), h('span', { class: 'datos' }, h('strong', {}, `Sale ${nombreCorto(d.nombre(id))}`), h('small', {}, `Vuelve ${nombreCorto(d.nombre(d.reemplazados.get(id)))}`))));
     liberosFuera.forEach((l) => filas.push(h('button', { class: 'opcion', onclick: () => { V.aplicar((e, c) => entrarLibero(e, c, l, id)); v.cerrar(); } }, circuloJugador(V, l), h('span', { class: 'datos' }, h('strong', {}, `Entra ${nombreCorto(d.nombre(l))} por ${nombreCorto(d.nombre(id))}`)))));
     filas.push(h('button', { class: 'opcion peligro', onclick: () => { v.cerrar(); abrirNuevoLibero(V, id); } }, icono('alerta'), h('span', { class: 'datos' }, h('strong', {}, 'No puede seguir (nuevo líbero)'))));
+    filas.push(h('button', { class: 'opcion peligro', 'data-lesion': '', onclick: () => { v.cerrar(); abrirLesion(V, id); } }, icono('alerta'), h('span', { class: 'datos' }, h('strong', {}, 'Lesión'), h('small', {}, 'La marca limitada o no apta y sigue la regla 19.4'))));
   } else {
     if (INDICES_ZAGUERA.includes(indice)) {
       liberosFuera.forEach((l) => filas.push(h('button', { class: 'opcion principal', onclick: () => { V.aplicar((e, c) => entrarLibero(e, c, l, id)); v.cerrar(); } }, circuloJugador(V, l), h('span', { class: 'datos' }, h('strong', {}, `Entra ${nombreCorto(d.nombre(l))} por ${nombreCorto(d.nombre(id))}`), h('small', {}, 'No cuenta como cambio')))));
     }
     filas.push(h('button', { class: 'opcion', onclick: () => { v.cerrar(); abrirCambio(V, id); } }, icono('rotar'), h('span', { class: 'datos' }, h('strong', {}, 'Hacer un cambio'), h('small', {}, `${d.sustitucionesUsadas}/${MAX_SUSTITUCIONES} usados en este set`))));
+    filas.push(h('button', { class: 'opcion peligro', 'data-lesion': '', onclick: () => { v.cerrar(); abrirLesion(V, id); } }, icono('alerta'), h('span', { class: 'datos' }, h('strong', {}, 'Lesión'), h('small', {}, 'La marca limitada o no apta y te propone quién entra'))));
   }
   const v = abrirVentana({ titulo: `P${indice + 1} · ${d.nombre(id)}`, subtitulo: nombrePosicion(indice + 1), contenido: h('div', { class: 'lista-opciones' }, filas), ancho: 'media' });
 }
@@ -194,7 +197,7 @@ export function abrirCambio(V, saleId, { entraPreelegido = null } = {}) {
   abrirVentana({ titulo: `Sale ${d.nombre(saleId)}`, subtitulo: `¿Quién entra? · cambios ${d.sustitucionesUsadas}/${MAX_SUSTITUCIONES}`, contenido: (cerrar) => { pintar(cerrar); return cuerpo; } });
 }
 
-function abrirNuevoLibero(V, lesionadoId) {
+export function abrirNuevoLibero(V, lesionadoId) {
   const { d } = V;
   abrirVentana({
     titulo: 'Nuevo líbero (regla 19.4)',
@@ -405,7 +408,14 @@ function cambiosDelSet(V) {
   const { d, est } = V;
   const lista = est.actual.sustituciones.filter((s) => !s.porLibero);
   if (!est.actual.plantillaConfirmada) return null;
-  return h('div', {}, h('div', { class: 'titulo-grupo' }, `Cambios · ${d.sustitucionesUsadas}/${MAX_SUSTITUCIONES}`), lista.length ? h('div', { class: 'lista-jugadas' }, lista.map((s) => h('div', {}, `${s.nuevoLibero ? 'Nuevo líbero' : s.excepcional ? 'Excepcional' : 'Cambio'}: entra ${d.nombre(s.jugadorEntraId)} por ${d.nombre(s.jugadorSaleId)}`, h('span', { class: 'cal' }, `${s.puntosLocal}-${s.puntosVisitante}`)))) : h('p', { class: 'nota' }, 'Todavía no hay cambios.'));
+  const lesiones = est.lesiones ?? [];
+  return h(
+    'div',
+    {},
+    h('div', { class: 'titulo-grupo' }, `Cambios · ${d.sustitucionesUsadas}/${MAX_SUSTITUCIONES}`),
+    lista.length ? h('div', { class: 'lista-jugadas' }, lista.map((s) => h('div', {}, `${s.nuevoLibero ? 'Nuevo líbero' : s.excepcional ? 'Excepcional' : 'Cambio'}: entra ${d.nombre(s.jugadorEntraId)} por ${d.nombre(s.jugadorSaleId)}`, h('span', { class: 'cal' }, `${s.puntosLocal}-${s.puntosVisitante}`)))) : h('p', { class: 'nota' }, 'Todavía no hay cambios.'),
+    lesiones.length ? h('div', { class: 'lista-jugadas', 'data-lesiones-partido': '' }, lesiones.map((l) => h('div', {}, `Lesión: ${d.nombre(l.jugadorId)} · ${l.zona} · ${l.disponibilidad === 'no_apta' ? 'no apta' : 'limitada'}`, h('span', { class: 'cal' }, `${l.puntosLocal}-${l.puntosVisitante}`)))) : null
+  );
 }
 
 export function vistaPlantilla(V) {

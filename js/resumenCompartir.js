@@ -1,4 +1,6 @@
 import { CATEGORIA_LABEL, GENERO_LABEL } from './reglas/catalogos.js';
+import { PESOS_MVP_POR_DEFECTO } from './mvp.js';
+import { frasesDeFormula, normalizarPesos } from './pesosMvp.js';
 
 // Resumen del partido para compartir (WhatsApp, familias): el mismo de Roots, pero hecho en la tablet.
 // Marcador por sets, mejores jugadoras y puntos clave. Se dibuja una sola vez en un canvas y de ahí salen la
@@ -54,8 +56,77 @@ function conteosPorFundamento(eventos) {
 const acciones = (c) => sumar(c.doble_positivo, c.positivo, c.negativo, c.error);
 const positivas = (c) => c.doble_positivo + c.positivo;
 
+// Texto para la entrenadora (se ve junto a los botones del resumen, NO en la imagen que reciben las familias).
+// Texto para la entrenadora con los pesos vigentes (los de Ajustes → «Puntos del MVP»). Sin argumento, los de siempre.
+export function explicacionMvp(pesos = PESOS_MVP_POR_DEFECTO) {
+  const f = frasesDeFormula(pesos);
+  return [
+    'El MVP es quien más puntos de impacto suma; la primera de «Mejores jugadoras».',
+    f.directos,
+    f.colocacion,
+    f.errores,
+    'Hay que tener al menos 3 jugadas (8 si es líbero) y puntos positivos para aparecer.',
+  ];
+}
+export const EXPLICACION_MVP = explicacionMvp();
+
+// Puntos de impacto de UNA jugadora en el partido (recibe sus jugadas). Es lo que decide el MVP. Con los pesos de siempre:
+//   + 1    por cada punto directo de ataque, saque o bloqueo (calificación «doble positivo»)
+//   + 0,33 por cada recepción o defensa perfecta, y + 0,1 por cada recepción o defensa positiva (así una líbero también puede
+//          ser MVP, pero necesita ~12 perfectas para igualar 4 puntos directos de ataque)
+//   − 1    por cada error en cualquier fundamento (incluida la colocación)
+//   + 0,25 por cada colocación perfecta, con un TOPE de 2,5 puntos por partido (10 perfectas)
+// Los pesos se pueden cambiar desde Ajustes (js/pesosMvp.js): `pesos` trae los vigentes; sin él se usan los de siempre.
+// La colocadora toca el balón en casi todas las jugadas: si cada toque sumara sin límite ganaría siempre por volumen.
+// Con el tope se premia que arme bien (hasta 2,5 puntos), no que arme mucho; su ataque, saque y bloqueo cuentan como los de cualquiera.
+const PUNTOS_DIRECTOS = ['Ataque', 'Saque', 'Bloqueo'];
+// Mínimo de jugadas para entrar al top 3: la líbero solo recibe y defiende, así que juega muchas más jugadas que el resto.
+const MIN_JUGADAS_LIBERO = 8;
+const redondear2 = (n) => Math.round(n * 100) / 100;
+const esPosicionLibero = (posicion) => /^liber[oa]$/.test(String(posicion ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase());
+const PUNTOS_PERFECTAS = ['Recepción', 'Defensa'];
+export function puntosDeImpacto(jugadas, pesos = PESOS_MVP_POR_DEFECTO) {
+  const p = normalizarPesos(pesos);
+  const porFundamento = conteosPorFundamento(jugadas);
+  let directos = 0;
+  let perfectas = 0;
+  let positivasRecDef = 0;
+  let bonusColocacion = 0;
+  let errores = 0;
+  let jugadasQueCuentan = 0;
+  let positivasTotal = 0;
+  const aporte = new Map(); // fundamento -> puntos que sumó
+  for (const [fundamento, c] of porFundamento) {
+    errores += c.error;
+    positivasTotal += positivas(c);
+    jugadasQueCuentan += acciones(c);
+    if (fundamento === 'Colocación') {
+      bonusColocacion = Math.min(p.topeColocacion, c.doble_positivo * p.colocacionPerfecta);
+      aporte.set(fundamento, bonusColocacion);
+    } else if (PUNTOS_DIRECTOS.includes(fundamento)) {
+      directos += c.doble_positivo;
+      aporte.set(fundamento, c.doble_positivo * p.directo);
+    } else if (PUNTOS_PERFECTAS.includes(fundamento)) {
+      perfectas += c.doble_positivo;
+      positivasRecDef += c.positivo;
+      aporte.set(fundamento, c.doble_positivo * p.recepcionDefensaPerfecta + c.positivo * p.recepcionDefensaPositiva);
+    }
+  }
+  const puntos = redondear2(directos * p.directo + perfectas * p.recepcionDefensaPerfecta + positivasRecDef * p.recepcionDefensaPositiva + bonusColocacion - errores * p.error);
+  const [mejor, valor] = [...aporte.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  let detalle = '';
+  if (mejor && valor > 0) {
+    detalle = PUNTOS_DIRECTOS.includes(mejor)
+      ? `Brilló en ${mejor.toLowerCase()}: ${plural(porFundamento.get(mejor).doble_positivo, 'punto directo', 'puntos directos')}`
+      : mejor === 'Colocación'
+        ? `Brilló en colocación: ${plural(Math.round(valor / p.colocacionPerfecta), 'colocación perfecta', 'colocaciones perfectas')}`
+        : `Brilló en ${mejor.toLowerCase()}: ${plural(porFundamento.get(mejor).doble_positivo, 'acción perfecta', 'acciones perfectas')}`;
+  }
+  return { puntos, directos, perfectas, bonusColocacion, errores, jugadasQueCuentan, positivas: positivasTotal, detalle };
+}
+
 // Convierte los datos del partido en lo que se va a mostrar. No toca el navegador (se puede probar aparte).
-export function datosResumenPartido({ partido, torneo, jugadores, eventos }) {
+export function datosResumenPartido({ partido, torneo, jugadores, eventos, pesos = PESOS_MVP_POR_DEFECTO }) {
   const esVisitante = partido.ladoPropio === 'visitante';
   const rival = esVisitante ? partido.equipoLocal : partido.equipoVisitante;
   const sets = (partido.sets ?? []).map((s) => {
@@ -77,7 +148,8 @@ export function datosResumenPartido({ partido, torneo, jugadores, eventos }) {
   const setsRival = sets.filter((s) => s.rival > s.roots).length;
   const gano = setsRoots > setsRival;
 
-  // Jugadoras destacadas: mejor balance (positivas − negativas) con un mínimo de participación
+  // Jugadoras destacadas (la MVP es la primera): se ordenan por PUNTOS DE IMPACTO, no por cantidad de jugadas.
+  // Así la colocadora, que toca el balón en casi todas las jugadas, no gana el MVP por volumen. Ver puntosDeImpacto.
   const porJugador = new Map();
   for (const e of eventos) {
     if (!porJugador.has(e.jugadorId)) porJugador.set(e.jugadorId, []);
@@ -85,23 +157,17 @@ export function datosResumenPartido({ partido, torneo, jugadores, eventos }) {
   }
   const destacadas = jugadores
     .filter((j) => porJugador.has(j.id))
-    .map((j) => {
-      const propios = porJugador.get(j.id);
-      const porFundamento = conteosPorFundamento(propios);
-      const total = sumar(...[...porFundamento.values()].map(acciones));
-      const pos = sumar(...[...porFundamento.values()].map(positivas));
-      const balance = pos - (total - pos);
-      const fuerte = [...porFundamento.entries()].sort((a, b) => positivas(b[1]) - positivas(a[1]))[0];
-      return { jugador: j, total, pos, balance, fuerte: fuerte && positivas(fuerte[1]) > 0 ? { fundamento: fuerte[0], n: positivas(fuerte[1]) } : null };
-    })
-    .filter((d) => d.total >= MIN_ACCIONES_DESTACADA && d.balance > 0)
-    .sort((a, b) => b.balance - a.balance || b.pos - a.pos || b.total - a.total)
+    .map((j) => ({ jugador: j, ...puntosDeImpacto(porJugador.get(j.id), pesos) }))
+    .filter((d) => d.jugadasQueCuentan >= (esPosicionLibero(d.jugador.posicion) ? MIN_JUGADAS_LIBERO : MIN_ACCIONES_DESTACADA) && d.puntos > 0)
+    .sort((a, b) => b.puntos - a.puntos || a.errores - b.errores || b.jugadasQueCuentan - a.jugadasQueCuentan)
     .slice(0, 3)
-    .map((d) => ({
+    .map((d, i) => ({
       nombre: nombreCorto(d.jugador.nombre),
       numero: d.jugador.numero,
-      positivas: d.pos,
-      detalle: d.fuerte ? `Brilló en ${d.fuerte.fundamento.toLowerCase()}: ${plural(d.fuerte.n, 'acción positiva', 'acciones positivas')}` : '',
+      mvp: i === 0,
+      puntos: d.puntos,
+      positivas: d.positivas,
+      detalle: d.detalle,
     }));
 
   // Puntos clave: se arman con lo que realmente pasó en el partido
@@ -375,7 +441,19 @@ export function dibujarResumen(datos, logo = null, crearCanvas = (w, h) => Objec
       ctx.font = `bold 32px ${FUENTE}`;
       ctx.textAlign = 'center';
       ctx.fillText(String(i + 1), MARGEN + 70, cy + 11);
-      textoAjustado(ctx, `${d.nombre}${d.numero != null ? `  #${d.numero}` : ''}`, MARGEN + 130, cy - 4, 560, { tam: 34, color: NAVY });
+      const textoNombre = `${d.nombre}${d.numero != null ? `  #${d.numero}` : ''}`;
+      textoAjustado(ctx, textoNombre, MARGEN + 130, cy - 4, 560, { tam: 34, color: NAVY });
+      if (d.mvp) {
+        // La etiqueta va a la derecha del nombre, a su misma altura.
+        const xEtiqueta = MARGEN + 130 + ctx.measureText(textoNombre).width + 18;
+        ctx.fillStyle = '#f59e0b';
+        rectRedondeado(ctx, xEtiqueta, cy - 32, 84, 36, 18);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold 24px ${FUENTE}`;
+        ctx.textAlign = 'center';
+        ctx.fillText('MVP', xEtiqueta + 42, cy - 6);
+      }
       if (d.detalle) textoAjustado(ctx, d.detalle, MARGEN + 130, cy + 32, 560, { tam: 24, peso: 'normal', color: GRIS });
       ctx.fillStyle = VERDE_FONDO;
       rectRedondeado(ctx, ANCHO - MARGEN - 40 - 150, cy - 30, 150, 60, 30);
@@ -383,7 +461,7 @@ export function dibujarResumen(datos, logo = null, crearCanvas = (w, h) => Objec
       ctx.fillStyle = VERDE;
       ctx.font = `bold 28px ${FUENTE}`;
       ctx.textAlign = 'center';
-      ctx.fillText(`+${d.positivas}`, ANCHO - MARGEN - 40 - 75, cy + 10);
+      ctx.fillText(`+${String(Math.round(d.puntos * 10) / 10).replace('.', ',')}`, ANCHO - MARGEN - 40 - 75, cy + 10);
     });
     y += alto + 30;
   }
@@ -433,7 +511,7 @@ export function dibujarResumen(datos, logo = null, crearCanvas = (w, h) => Objec
 // ───────────── Del partido de la tablet a lo que dibuja el resumen ─────────────
 
 // Roots arma el resumen con los sets y jugadas ya guardados; la tablet hace lo mismo: solo cuentan los sets cerrados.
-export function datosDeRegistro({ registro, torneo, jugadores }) {
+export function datosDeRegistro({ registro, torneo, jugadores, pesos = PESOS_MVP_POR_DEFECTO }) {
   const est = registro.est;
   return datosResumenPartido({
     partido: {
@@ -451,6 +529,7 @@ export function datosDeRegistro({ registro, torneo, jugadores }) {
     torneo,
     jugadores,
     eventos: est.sets.flatMap((s) => s.eventos),
+    pesos,
   });
 }
 
@@ -522,8 +601,8 @@ export function aBlob(canvas, tipo = 'image/png', calidad) {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo crear la imagen.'))), tipo, calidad));
 }
 
-export async function prepararResumen({ registro, torneo, jugadores }) {
-  const datos = datosDeRegistro({ registro, torneo, jugadores });
+export async function prepararResumen({ registro, torneo, jugadores, pesos = PESOS_MVP_POR_DEFECTO }) {
+  const datos = datosDeRegistro({ registro, torneo, jugadores, pesos });
   const logo = await cargarLogo();
   const canvas = dibujarResumen(datos, logo);
   return { datos, canvas, nombre: nombreBaseResumen(registro, datos) };

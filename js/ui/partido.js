@@ -27,6 +27,7 @@ import { vistaResumen } from './resumenPartido.js';
 import { iniciarTiempoMuerto } from './tiempoMuerto.js';
 import { bloquearToques } from './candado.js';
 import { relojPartido } from './relojPartido.js';
+import { abrirElegirLesionada } from './lesion.js';
 
 let estadoVista = { partidoId: null, tab: 'plantilla', avisos: [], destellos: [], descartadas: new Set() };
 
@@ -460,6 +461,7 @@ function abrirMenu(V) {
   if (est.sets.length > 0) filas.push(opcion('lista', 'Corregir sets guardados', 'Cambiar un marcador o reabrir el último set', () => abrirCorregirSets(V)));
   if (V.bloqueado && est.sets.length > 0) filas.push(opcion('bajar', 'Exportar y guardar copia', 'Resultados para Roots y copia de seguridad, en un solo paso', () => abrirCierrePartido(reg), 'principal'));
   if (est.finalizado && !partidoDecidido(est)) filas.push(opcion('rotar', 'Reabrir partido', '', () => { reabrirPartido(est); guardarPartido(reg); app.renderizar(); }));
+  if (!V.bloqueado && est.actual.plantillaConfirmada) filas.push(opcion('alerta', 'Lesión de una jugadora', 'La marca limitada o no apta, te propone quién entra y la marca viaja a Roots', () => abrirElegirLesionada(V), 'peligro'));
   if (!V.bloqueado) {
     filas.push(opcion('lista', 'Nuestro equipo', `Ahora: ${V.nombres[est.ladoPropio]}`, () => { elegirLadoPropio(est, est.ladoPropio === 'local' ? 'visitante' : 'local'); reg.ladoConfirmado = true; guardarPartido(reg); app.renderizar(); toast(`Nuestro equipo: ${V.nombres[est.ladoPropio]}.`, 'ok'); }));
     if (est.sets.length === 0) filas.push(opcion('documento', 'Formato del partido', est.formatoSets === 'mejor_de_5' ? 'Mejor de 5' : est.formatoSets === 'mejor_de_3' ? 'Mejor de 3' : 'Sin elegir', () => abrirFormato(V)));

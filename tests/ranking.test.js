@@ -184,3 +184,49 @@ test('gráfica: escapa los nombres, corta la línea donde no hay dato y dibuja u
   assert.ok((muchas.match(/text-anchor="middle"/g) ?? []).length <= 9);
   assert.match(muchas, /T19/);
 });
+
+// ── MVP del torneo (js/mvp.js) ──
+import { mvpDeActuaciones, puntosDeImpactoDeConteos } from '../js/mvp.js';
+import { puntosDeImpacto } from '../js/resumenCompartir.js';
+
+test('MVP del torneo: suma los puntos de impacto de todos los partidos y el tope de colocación va partido a partido', () => {
+  const act = (partidoId, jugadorId, grupo, conteos, torneoId = 1) => ({ partidoId, torneoId, fecha: '', hora: '', jugadorId, grupo, conteos });
+  const d = (n) => ({ doble_positivo: n, positivo: 0, negativo: 0, error: 0 });
+  const acts = [
+    act(1, 1, 'ataque', { Ataque: d(5) }),
+    act(2, 1, 'ataque', { Ataque: d(4) }),
+    act(1, 2, 'colocacion', { Colocación: d(12) }),
+    act(2, 2, 'colocacion', { Colocación: d(12) }),
+    act(1, 3, 'libero', { Recepción: d(7) }), // 7 jugadas: no llega al mínimo de la líbero (8)
+    act(3, 1, 'ataque', { Ataque: d(9) }, 2), // otro torneo
+  ];
+  const t1 = mvpDeActuaciones(acts, { torneoId: 1 });
+  assert.deepEqual(t1.map((f) => [f.jugadorId, f.puntos, f.partidos, f.puesto]), [[1, 9, 2, 1], [2, 5, 2, 2]]);
+  assert.equal(t1[0].promedio, 4.5);
+  assert.equal(t1[0].mejorPartido.partidoId, 1);
+  assert.equal(mvpDeActuaciones(acts, { torneoId: null })[0].puntos, 18); // todos los torneos
+  assert.deepEqual(mvpDeActuaciones(acts, { torneoId: 1, grupo: 'colocacion' }).map((f) => f.jugadorId), [2]);
+});
+
+test('MVP del torneo usa la misma fórmula que el MVP de un partido', () => {
+  const jugadas = [
+    ...Array(3).fill({ fundamento: 'Ataque', calificacion: 'doble_positivo' }),
+    ...Array(4).fill({ fundamento: 'Recepción', calificacion: 'doble_positivo' }),
+    ...Array(2).fill({ fundamento: 'Defensa', calificacion: 'positivo' }),
+    { fundamento: 'Saque', calificacion: 'error' },
+    ...Array(14).fill({ fundamento: 'Colocación', calificacion: 'doble_positivo' }),
+  ];
+  const conteos = {};
+  for (const e of jugadas) (conteos[e.fundamento] ??= { doble_positivo: 0, positivo: 0, negativo: 0, error: 0 })[e.calificacion] += 1;
+  assert.equal(puntosDeImpactoDeConteos(conteos).puntos, puntosDeImpacto(jugadas).puntos);
+  assert.equal(puntosDeImpactoDeConteos(conteos, { directo: 2 }).puntos, puntosDeImpactoDeConteos(conteos).puntos + 3);
+});
+
+test('MVP por posición: la armadora y la líbero tienen su propio premio, con los fundamentos de su posición', () => {
+  const act = (partidoId, jugadorId, grupo, conteos) => ({ partidoId, torneoId: 1, fecha: '', hora: '', jugadorId, grupo, conteos });
+  const d = (n) => ({ doble_positivo: n, positivo: 0, negativo: 0, error: 0 });
+  const acts = [act(1, 1, 'colocacion', { Colocación: d(8) }), act(1, 2, 'libero', { Recepción: d(9) }), act(1, 3, 'atacante', { Ataque: d(6) })];
+  assert.deepEqual(mvpDeActuaciones(acts, { grupo: 'colocacion' }).map((f) => [f.jugadorId, f.puntos]), [[1, 2]]);
+  assert.deepEqual(mvpDeActuaciones(acts, { grupo: 'libero' }).map((f) => [f.jugadorId, f.puntos]), [[2, 2.97]]);
+  assert.deepEqual(mvpDeActuaciones(acts).map((f) => f.jugadorId), [3, 2, 1]); // sin filtro compiten todas
+});

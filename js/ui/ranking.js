@@ -9,6 +9,8 @@ import {
 import { CATEGORIA_LABEL, CATEGORIAS } from '../reglas/catalogos.js';
 import { FUNDAMENTOS } from '../reglas/anotacion.js';
 import { nombreDeGrupo } from '../estadisticas.js';
+import { mvpDeActuaciones, textoPuntos } from '../mvp.js';
+import { frasesDeFormula } from '../pesosMvp.js';
 import { historialParaRanking } from '../historial.js';
 import { abrirVentana } from './aviso.js';
 import { h, icono, rellenar } from './dom.js';
@@ -17,7 +19,7 @@ export const RUTA_RANKING = '#/ranking';
 const GENERO_TEXTO = { femenino: 'Femenino', masculino: 'Masculino' };
 
 // Lo elegido se recuerda mientras la app está abierta (al volver de un partido sigue igual).
-const E = { vista: 'ranking', grupo: null, metrica: null, torneo: null, genero: null, categoria: 'todas', filtrosAbiertos: false };
+const E = { vista: 'ranking', grupo: null, metrica: null, torneo: null, genero: null, categoria: 'todas', filtrosAbiertos: false, mvpGrupo: null };
 
 // Lo de la tablet más lo archivado de los partidos que ya se exportaron y se quitaron.
 function datos() {
@@ -183,6 +185,44 @@ function vistaDeRanking({ acts, actsVista, torneosConJugadas, filtrosGenerales }
   ];
 }
 
+// ─────────────── MVP del torneo ───────────────
+// Suma los puntos de impacto de todos los partidos del torneo elegido (o de todos). Ver js/mvp.js.
+function filaMvp({ fila, maximo }) {
+  const j = app.jugadores.get(fila.jugadorId);
+  const ancho = maximo > 0 ? (Math.max(fila.puntos, 0) / maximo) * 100 : 0;
+  const posiciones = fila.posiciones.map(nombreDeGrupo).join(' / ');
+  return h(
+    'button',
+    { class: 'opcion fila-ranking', type: 'button', 'data-jugadora': String(fila.jugadorId), 'data-mvp-fila': '', onclick: () => abrirEvolucionJugadora(fila.jugadorId) },
+    h('span', { class: `rk-puesto ${fila.puesto <= 3 ? `p${fila.puesto}` : 'sin'}` }, fila.puesto),
+    h('span', { class: 'datos' }, h('strong', {}, j?.nombre ?? 'Jugadora sin registrar'), h('small', {}, [j?.numero != null ? `#${j.numero}` : null, posiciones, plural(fila.partidos, 'partido', 'partidos')].filter(Boolean).join(' · '))),
+    h('span', { class: 'rk-barra', 'aria-hidden': 'true' }, h('span', { style: { width: `${Math.max(ancho, 2)}%` } })),
+    h('span', { class: 'rk-valor' }, h('span', { class: 'rk-valor-fila' }, h('strong', {}, textoPuntos(fila.puntos))), h('small', {}, `${textoPuntos(fila.promedio)} por partido · ${plural(fila.directos, 'directo', 'directos')} · ${plural(fila.errores, 'error', 'errores')}`))
+  );
+}
+
+function vistaDeMvp({ acts, torneosConJugadas, filtrosGenerales }) {
+  const nombre = E.torneo == null ? 'todos los torneos' : (torneosConJugadas.find((t) => t.id === E.torneo)?.nombre ?? 'el torneo');
+  const actsMvp = E.torneo == null ? acts : acts.filter((a) => a.torneoId === E.torneo);
+  const grupos = gruposPresentes(actsMvp);
+  if (E.mvpGrupo != null && !grupos.some((g) => g.clave === E.mvpGrupo)) E.mvpGrupo = null;
+  const tabla = mvpDeActuaciones(acts, { torneoId: E.torneo, grupo: E.mvpGrupo, pesos: app.pesosMvp });
+  const premio = E.mvpGrupo == null ? 'MVP' : `MVP ${nombreDeGrupo(E.mvpGrupo)}`;
+  const maximo = tabla.reduce((m, f) => Math.max(m, f.puntos), 0);
+  const mvp = tabla[0];
+  const j = mvp ? app.jugadores.get(mvp.jugadorId) : null;
+  return [
+    h('div', { class: 'tarjeta rk-filtros' }, h('div', { class: 'titulo-grupo' }, 'Premio por posición'), h('div', { class: 'rk-chips' }, chip('Todas', E.mvpGrupo == null, () => { E.mvpGrupo = null; app.renderizar(); }, { 'data-mvp-grupo': 'todas' }), grupos.map((g) => chip(`MVP ${g.nombre}`, E.mvpGrupo === g.clave, () => { E.mvpGrupo = g.clave; app.renderizar(); }, { 'data-mvp-grupo': g.clave }))), filtrosGenerales),
+    mvp && mvp.puntos > 0
+      ? h('div', { class: 'tarjeta rk-dato', 'data-mvp-torneo': '' }, h('small', {}, E.torneo == null ? `${premio} de todos los torneos juntos` : `${premio} del torneo · ${nombre}`), h('strong', { class: 'rk-dato-valor' }, j?.nombre ?? 'Jugadora sin registrar'), h('small', {}, `${textoPuntos(mvp.puntos)} puntos de impacto en ${plural(mvp.partidos, 'partido', 'partidos')} (${textoPuntos(mvp.promedio)} por partido)`))
+      : null,
+    tabla.length === 0
+      ? h('div', { class: 'tarjeta' }, h('p', { class: 'nota' }, `Todavía no hay jugadoras con partidos suficientes en ${nombre}: se necesitan al menos 3 jugadas en un partido (8 la líbero).`))
+      : h('div', { class: 'lista-opciones rk-lista', 'data-lista-mvp': '' }, h('div', { class: 'titulo-grupo rk-titulo' }, 'Puntos de impacto sumados'), tabla.map((fila) => filaMvp({ fila, maximo }))),
+    h('p', { class: 'nota' }, `Cada partido suma sus puntos de impacto. ${frasesDeFormula(app.pesosMvp).directos} ${frasesDeFormula(app.pesosMvp).colocacion} ${frasesDeFormula(app.pesosMvp).errores} Los puntos se cambian en Ajustes → Puntos del MVP. El MVP del torneo es quien más suma entre todos sus partidos. Con «Premio por posición» cada una compite solo con las de la posición que jugó (armadora, líbero, centrales…) y solo le cuentan los fundamentos de esa posición; un partido solo cuenta si tuvo 3 jugadas o más (8 la líbero). Toca a una jugadora para ver su evolución.`),
+  ];
+}
+
 // ─────────────── Pantalla ───────────────
 export function vistaRanking() {
   const { todas, torneos, archivados } = datos();
@@ -200,10 +240,10 @@ export function vistaRanking() {
   if (!todas.length) {
     cuerpo.push(vacio());
   } else {
-    cuerpo.push(h('div', { class: 'segmentos rk-vistas' }, [['ranking', 'Ranking'], ['equipo', 'Evolución del equipo']].map(([v, t]) => h('button', { type: 'button', 'data-vista-ranking': v, 'aria-pressed': E.vista === v ? 'true' : 'false', onclick: () => { E.vista = v; app.renderizar(); } }, t))));
+    cuerpo.push(h('div', { class: 'segmentos rk-vistas' }, [['ranking', 'Ranking'], ['mvp', 'MVP del torneo'], ['equipo', 'Evolución del equipo']].map(([v, t]) => h('button', { type: 'button', 'data-vista-ranking': v, 'aria-pressed': E.vista === v ? 'true' : 'false', onclick: () => { E.vista = v; if (v === 'mvp' && E.torneo == null && torneosConJugadas.length) E.torneo = torneosConJugadas[torneosConJugadas.length - 1].id; app.renderizar(); } }, t))));
     const generales = [];
     if (generos.length > 1) generales.push(h('div', { class: 'segmentos rk-genero' }, generos.map((g) => h('button', { type: 'button', 'data-genero': g, 'aria-pressed': E.genero === g ? 'true' : 'false', onclick: () => { E.genero = g; app.renderizar(); } }, GENERO_TEXTO[g]))));
-    const nodosTorneo = E.vista === 'ranking' && torneosConJugadas.length > 0 ? [h('div', { class: 'titulo-grupo' }, 'Torneo'), h('div', { class: 'rk-chips' }, chip('Todos los torneos', E.torneo == null, () => { E.torneo = null; app.renderizar(); }, { 'data-torneo': 'todos' }), torneosConJugadas.map((t) => chip(t.nombre, E.torneo === t.id, () => { E.torneo = t.id; app.renderizar(); }, { 'data-torneo': String(t.id) })))] : [];
+    const nodosTorneo = (E.vista === 'ranking' || E.vista === 'mvp') && torneosConJugadas.length > 0 ? [h('div', { class: 'titulo-grupo' }, 'Torneo'), h('div', { class: 'rk-chips' }, chip('Todos los torneos', E.torneo == null, () => { E.torneo = null; app.renderizar(); }, { 'data-torneo': 'todos' }), torneosConJugadas.map((t) => chip(t.nombre, E.torneo === t.id, () => { E.torneo = t.id; app.renderizar(); }, { 'data-torneo': String(t.id) })))] : [];
     const nodosCategoria = categorias.length > 1 ? [h('div', { class: 'titulo-grupo' }, 'Categoría'), h('div', { class: 'rk-chips' }, chip('Todas', E.categoria === 'todas', () => { E.categoria = 'todas'; app.renderizar(); }), categorias.map((c) => chip(CATEGORIA_LABEL[c] ?? c, E.categoria === c, () => { E.categoria = c; app.renderizar(); }, { 'data-categoria': c })))] : [];
     // En el ranking, torneo y categoría van en un desplegable que dice lo elegido: así la lista queda a la vista sin bajar.
     const resumenFiltros = [E.torneo == null ? 'Todos los torneos' : (torneosConJugadas.find((t) => t.id === E.torneo)?.nombre ?? ''), categorias.length > 1 ? (E.categoria === 'todas' ? 'Todas las categorías' : (CATEGORIA_LABEL[E.categoria] ?? E.categoria)) : null].filter(Boolean).join(' · ');
@@ -213,12 +253,14 @@ export function vistaRanking() {
       cuerpo.push(...(masFiltros ? [h('div', { class: 'tarjeta rk-filtros' }, masFiltros)] : nodosCategoria.length ? [h('div', { class: 'tarjeta rk-filtros' }, nodosCategoria)] : []), h('div', { class: 'tarjeta' }, h('p', { class: 'nota' }, 'Con estos filtros no hay jugadas.')));
     } else if (E.vista === 'ranking') {
       cuerpo.push(...vistaDeRanking({ acts, actsVista, torneosConJugadas, filtrosGenerales: masFiltros }));
+    } else if (E.vista === 'mvp') {
+      cuerpo.push(...vistaDeMvp({ acts, torneosConJugadas, filtrosGenerales: masFiltros }));
     } else {
       if (nodosCategoria.length) cuerpo.push(h('div', { class: 'tarjeta rk-filtros' }, nodosCategoria));
       cuerpo.push(bloqueEvolucion({ acts, torneos }));
     }
   }
-  const subtitulo = E.vista === 'equipo' && todas.length ? 'Cómo va el equipo de un torneo a otro' : 'Jugadoras por posición y su evolución por torneo';
+  const subtitulo = E.vista === 'equipo' && todas.length ? 'Cómo va el equipo de un torneo a otro' : E.vista === 'mvp' && todas.length ? 'Quién más aportó en el torneo' : 'Jugadoras por posición y su evolución por torneo';
   if (todas.length && archivados) cuerpo.push(h('p', { class: 'nota', 'data-nota-archivo': '' }, `Incluye ${archivados} ${archivados === 1 ? 'partido' : 'partidos'} que ya exportaste y quitaste de la tablet: su resumen se conserva para el ranking.`));
   return h('div', { class: 'inicio ranking', 'data-pantalla': 'ranking' }, cabecera(subtitulo), h('main', { class: 'inicio-cuerpo', 'data-scroll': 'ranking' }, cuerpo));
 }

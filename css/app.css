@@ -852,3 +852,13 @@ body.practica::after { content: ''; position: fixed; inset: 0; z-index: 60; poin
 .candado-barra { position: absolute !important; inset: 0 auto 0 0; z-index: 0 !important; width: 0; background: var(--cancha); opacity: 0.55; }
 .candado-boton.mantiene .candado-barra { width: 100%; transition: width 1.5s linear; }
 @media (max-width: 860px) { .candado-marcador { flex-direction: column; gap: 8px; } .candado-eq b { font-size: min(26vw, 120px); } }
+
+/* Ajustes → Puntos del MVP */
+.peso-lista { display: grid; gap: 4px; }
+.peso-fila { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borde); }
+.peso-texto strong { display: block; }
+.peso-texto small { color: var(--texto-3); }
+.peso-control { display: flex; gap: 6px; align-items: center; }
+.peso-boton { min-width: 52px; min-height: 52px; display: grid; place-items: center; border-radius: 12px; border: 2px solid var(--borde); background: var(--panel-2); color: var(--texto); }
+.peso-entrada { width: 88px; min-height: 52px; text-align: center; font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; border-radius: 12px; border: 2px solid var(--borde); background: var(--panel); color: var(--texto); }
+.peso-entrada[aria-invalid='true'] { border-color: var(--error); background: var(--error-fondo); }

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as m from '../js/motor.js';
-import { datosDeRegistro, construirPdfDeJpeg, nombreBaseResumen, dibujarResumen } from '../js/resumenCompartir.js';
+import { datosDeRegistro, construirPdfDeJpeg, nombreBaseResumen, dibujarResumen, puntosDeImpacto } from '../js/resumenCompartir.js';
 import { crearContexto, JUGADORAS } from './ayuda.js';
 
 const TORNEO = { id: 1, nombre: 'Copa Roots', genero: 'femenino', categoria: 'menores' };
 
-function partidoJugado({ ladoPropio = 'local' } = {}) {
+function partidoJugado({ ladoPropio = 'local', extra = null } = {}) {
   const est = m.nuevoEstadoPartido({ id: 1, equipoLocal: 'Roots', equipoVisitante: 'Rivales' });
   est.ladoPropio = ladoPropio;
   m.elegirFormato(est, 'mejor_de_3');
@@ -14,9 +14,10 @@ function partidoJugado({ ladoPropio = 'local' } = {}) {
   [1, 2, 3, 4, 5, 6].forEach((id) => m.toggleJugador(est, ctx, id));
   m.confirmarPlantilla(est, ctx);
   m.elegirSaque(est, 'local');
-  // Bea (2): 3 positivas y 1 error en ataque; Ana (1): 1 sola acción (no alcanza el mínimo)
-  ['positivo', 'doble_positivo', 'positivo', 'error'].forEach((c) => m.registrarJugada(est, ctx, 2, 'Ataque', c));
+  // Bea (2): 3 positivas (2 directas) y 1 error en ataque; Ana (1): 1 sola acción (no alcanza el mínimo)
+  ['positivo', 'doble_positivo', 'doble_positivo', 'error'].forEach((c) => m.registrarJugada(est, ctx, 2, 'Ataque', c));
   m.registrarJugada(est, ctx, 1, 'Saque', 'positivo');
+  extra?.(est, ctx); // jugadas de más, antes de cerrar el set (el set sin guardar no entra al resumen)
   m.guardarSet(est, ctx, 25, 20);
   return { registro: { id: 1, torneoId: 1, equipoLocal: 'Roots', equipoVisitante: 'Rivales', fecha: '2026-11-22', hora: '09:00', est }, est, ctx };
 }
@@ -103,3 +104,68 @@ test('los tiempos muertos pedidos salen en el resumen, del lado de Roots', () =>
   });
   assert.equal(dibujarResumen(d, null, crear).width, 1080);
 });
+
+test('la colocadora no gana el MVP solo por tocar más el balón: su bonus tiene tope', () => {
+  // Ana (colocadora): 30 colocaciones, 15 perfectas -> el bonus se frena en 2,5. Bea: 2 ataques directos y 1 error (1 punto).
+  const { registro } = partidoJugado({
+    extra: (est, ctx) => {
+      for (let i = 0; i < 30; i += 1) m.registrarJugada(est, ctx, 1, 'Colocación', i % 2 ? 'positivo' : 'doble_positivo');
+    },
+  });
+  const d = datosDeRegistro({ registro, torneo: TORNEO, jugadores: JUGADORAS });
+  const ana = d.destacadas.find((x) => x.nombre.startsWith('Ana'));
+  assert.equal(ana.puntos, 2.5);
+  assert.match(ana.detalle, /colocación/);
+  // Una atacante con 4 puntos directos le gana aunque Ana tenga mucho más volumen.
+  const { registro: r2 } = partidoJugado({
+    extra: (est, ctx) => {
+      for (let i = 0; i < 30; i += 1) m.registrarJugada(est, ctx, 1, 'Colocación', i % 2 ? 'positivo' : 'doble_positivo');
+      for (let i = 0; i < 4; i += 1) m.registrarJugada(est, ctx, 5, 'Ataque', 'doble_positivo');
+    },
+  });
+  const d2 = datosDeRegistro({ registro: r2, torneo: TORNEO, jugadores: JUGADORAS });
+  assert.equal(d2.destacadas[0].nombre, 'Eli Punta');
+  assert.equal(d2.destacadas[0].mvp, true);
+});
+
+test('una colocadora con buen partido sí puede ser la MVP', () => {
+  const { registro } = partidoJugado({
+    extra: (est, ctx) => {
+      for (let i = 0; i < 10; i += 1) m.registrarJugada(est, ctx, 1, 'Colocación', 'doble_positivo'); // 10 perfectas = 2,5 puntos
+    },
+  });
+  const d = datosDeRegistro({ registro, torneo: TORNEO, jugadores: JUGADORAS });
+  assert.equal(d.destacadas[0].nombre, 'Ana Colocadora'); // Bea hizo solo 1 punto neto
+  assert.equal(d.destacadas[0].mvp, true);
+});
+
+test('puntos de impacto: directos 1, recepción/defensa perfecta 0,33 y positiva 0,1, colocación perfecta 0,25 con tope, errores −1', () => {
+  const j = (fundamento, calificacion) => ({ fundamento, calificacion });
+  const r = puntosDeImpacto([
+    j('Ataque', 'doble_positivo'), j('Saque', 'doble_positivo'), j('Bloqueo', 'doble_positivo'),
+    j('Recepción', 'doble_positivo'), j('Defensa', 'doble_positivo'), j('Recepción', 'positivo'),
+    j('Ataque', 'error'),
+    j('Colocación', 'doble_positivo'), j('Colocación', 'doble_positivo'), j('Colocación', 'error'),
+  ]);
+  assert.equal(r.puntos, 3 + 2 * 0.33 + 0.1 + 2 * 0.25 - 2); // 3 directos + 0,66 + 0,1 + 0,5 − 2 errores = 2,26
+  assert.equal(r.jugadasQueCuentan, 10);
+  const muchas = puntosDeImpacto(Array.from({ length: 40 }, () => j('Colocación', 'doble_positivo')));
+  assert.equal(muchas.puntos, 2.5); // el tope evita ganar por volumen
+});
+
+test('una líbero necesita ~12 recepciones perfectas para igualar 4 puntos directos', () => {
+  const j = (fundamento, calificacion) => ({ fundamento, calificacion });
+  assert.equal(puntosDeImpacto(Array.from({ length: 12 }, () => j('Recepción', 'doble_positivo'))).puntos, 3.96);
+  const r = puntosDeImpacto([j('Recepción', 'doble_positivo'), j('Recepción', 'doble_positivo'), j('Defensa', 'doble_positivo'), j('Defensa', 'positivo')]);
+  assert.equal(r.puntos, 1.09);
+  assert.match(r.detalle, /3 acciones perfectas|perfectas/);
+});
+
+test('la líbero necesita al menos 8 jugadas para entrar al top; las demás, 3', () => {
+  const lib = (n) => ({ extra: (est, ctx) => { for (let i = 0; i < n; i += 1) m.registrarJugada(est, ctx, 7, i % 2 ? 'Defensa' : 'Recepción', 'doble_positivo'); } });
+  const pocas = partidoJugado(lib(6));
+  assert.equal(datosDeRegistro({ registro: pocas.registro, torneo: TORNEO, jugadores: JUGADORAS }).destacadas.some((x) => x.nombre.startsWith('Gabi')), false);
+  const justas = partidoJugado(lib(8));
+  assert.equal(datosDeRegistro({ registro: justas.registro, torneo: TORNEO, jugadores: JUGADORAS }).destacadas.some((x) => x.nombre.startsWith('Gabi')), true);
+});
+
